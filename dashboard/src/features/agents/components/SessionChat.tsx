@@ -6,6 +6,9 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChatPanel } from '@/features/agents/components/ChatPanel'
 import { useChatSession } from '@/features/agents/hooks/useChatSession'
+import { useDecideToolCall } from '@/features/agents/hooks/useDecideToolCall'
+import { useReplyStream } from '@/features/agents/hooks/useReplyStream'
+import { useRetryReply } from '@/features/agents/hooks/useRetryReply'
 import { useSendChatMessage } from '@/features/agents/hooks/useSendChatMessage'
 
 /** /agents/$sessionId: a saved session. */
@@ -18,6 +21,9 @@ export function SessionChat() {
 function Session({ id }: { id: number }) {
   const session = useChatSession(id)
   const send = useSendChatMessage(id)
+  const { reply } = useReplyStream(id)
+  const retry = useRetryReply(id)
+  const decide = useDecideToolCall(id)
   if (session.isPending) return <SessionSkeleton />
   if (session.isError) {
     return (
@@ -39,9 +45,17 @@ function Session({ id }: { id: number }) {
   return (
     <ChatPanel
       messages={session.data.messages}
-      pending={send.isPending ? send.variables : null}
+      sending={send.isPending ? send.variables : null}
       error={send.error?.message ?? null}
       onSend={(content, options) => send.mutate(content, options)}
+      reply={reply}
+      retry={{ run: () => retry.mutate(), pending: retry.isPending, error: retry.error?.message ?? null }}
+      decision={
+        decide.variables && (decide.isPending || decide.isError)
+          ? { ...decide.variables, pending: decide.isPending, error: decide.error?.message ?? null }
+          : null
+      }
+      onDecide={(callId, approve) => decide.mutate({ callId, approve })}
     />
   )
 }

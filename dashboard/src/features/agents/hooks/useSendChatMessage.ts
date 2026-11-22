@@ -1,19 +1,15 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { sendChatMessage, type ChatSession } from '@/features/agents/api'
-import { queryKeys } from '@/lib/queryKeys'
+import { useMutation } from '@tanstack/react-query'
+import { sendChatMessage } from '@/features/agents/api'
+import { useReplyStream } from '@/features/agents/hooks/useReplyStream'
 
-/** Sends a message in a session that already exists. */
+/**
+ * Sends a message in a session that already exists. The mutation lasts until the server saved the message, so its
+ * error means nothing was saved. The reply then streams through useReplyStream.
+ */
 export function useSendChatMessage(sessionId: number) {
-  const queryClient = useQueryClient()
+  const { follow } = useReplyStream(sessionId)
   return useMutation({
     mutationFn: (content: string) => sendChatMessage(sessionId, content),
-    onSuccess: (messages) => {
-      queryClient.setQueryData<ChatSession | null>(
-        queryKeys.chatSession(sessionId),
-        (session) => session && { ...session, messages: [...session.messages, ...messages] },
-      )
-      // The list orders sessions by their latest message, and takes the title from the first.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.chatSessions, exact: true })
-    },
+    onSuccess: ({ message, events }) => void follow(sessionId, events, { type: 'message', message }),
   })
 }
