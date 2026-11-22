@@ -142,6 +142,7 @@ After sign-in, the dashboard shows a sidebar beside the active section. Each sec
 - **Motion.** The width changes over 200ms with ease-out. It stops under `prefers-reduced-motion: reduce`.
 - **Phone.** Under 768px the sidebar is a sheet that slides in from the left over the page, dimmed by `--shadow` at 70%. Choosing a section closes it.
 - **Main area.** A 56px header holds the sidebar toggle and the section name on the left, and the theme switch on the right. Its bottom border lines up with the sidebar header's border. Below it, the section's empty state is centered: the section icon in a 40px raised square, a 20px title, and a short `--text-3` sentence that says the feature is planned. The browser tab shows the section name and the product, such as "Agents · Nextsci".
+- **Agents chat.** `/agents` shows a chat instead of the empty state. Messages sit in a column at most 720px wide: the user's on a `--surface` card aligned right, the model's as plain `--text-2` text aligned left. An error shows on a `--danger` tint with `--danger-text`. The composer at the bottom is a textarea (Enter sends, Shift+Enter adds a line) beside a primary send button.
 - **Not found.** Any other path shows the not-found page inside the shell. It uses the empty-state layout with a search icon, the title "Page not found", one sentence, and a primary **Go to Agents** button. The header and the browser tab say "Page not found", and no sidebar item is active.
 
 ## Writing on the page

@@ -6,6 +6,7 @@ import { NotFound } from '@/app/shell/NotFound'
 import type { Section } from '@/app/shell/sections'
 import { restoreSession } from '@/features/auth/api'
 import { SignInPage } from '@/features/auth/components/SignInPage'
+import { AgentChat } from '@/features/agents/components/AgentChat'
 import { queryKeys } from '@/lib/queryKeys'
 
 // The session query is the only record of who is signed in. Sign-in and sign-out write it in the cache.
@@ -60,7 +61,7 @@ const routeTree = rootRoute.addChildren([
   signInRoute,
   indexRoute,
   signedInRoute.addChildren([
-    plannedSection('/agents'),
+    createRoute({ getParentRoute: () => signedInRoute, path: '/agents', component: AgentChat }),
     plannedSection('/runs'),
     plannedSection('/tools'),
     plannedSection('/knowledge'),
