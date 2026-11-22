@@ -96,7 +96,7 @@ Headings use `--text`. Give display headings a vertical gradient from `--text` t
 
 The buttons, the `.brand` logo lockup, and the `.dot` status marker live in the shared components section of `design.css`. Use those classes as they are. The components below that section are specified here, and the dashboard builds them from tokens.
 
-The logo is `dashboard/public/favicon.svg`. Render it with an `<img>` element. Do not inline a copy of its SVG.
+The logo is `dashboard/public/favicon.svg`: an N drawn as a run, three finished steps in `#f7f8f8` and the live step in dark-theme `--accent` blue, on a `#08090a` tile with a faint light edge so it holds on dark backgrounds. Render it with an `<img>` element. Do not inline a copy of its SVG.
 
 ### Buttons
 
