@@ -1,67 +1,32 @@
 import io
-import json
 import os
-import urllib.error
+from datetime import UTC, datetime
+from pathlib import Path
 from unittest import mock
 
-from django.test import TestCase
+from engine.testing import reply
+from engine.types import AssistantMessage, ModelError, SystemMessage, TextDelta, UserMessage
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.agents.models import ChatMessage
 
-SESSIONS_URL = "/api/v1/agents/sessions/"
+from .streams import (
+    SESSIONS_URL,
+    ChatTestCase,
+    data,
+    messages_url,
+    names,
+    read_events,
+    reply_url,
+    session_url,
+)
 
-
-def session_url(session_id):
-    return f"{SESSIONS_URL}{session_id}/"
-
-
-def messages_url(session_id):
-    return f"{SESSIONS_URL}{session_id}/messages/"
-
-
-class FakeResponse:
-    def __init__(self, body):
-        self.body = json.dumps(body).encode()
-
-    def read(self, *args):
-        return self.body
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        return False
-
-
-def reply(content, model=None):
-    body = {"choices": [{"message": {"role": "assistant", "content": content}}]}
-    return FakeResponse({**body, "model": model} if model else body)
-
-
-def sent_messages(urlopen, call=-1):
-    """The conversation that a faked urlopen call sent to OpenRouter."""
-    return json.loads(urlopen.call_args_list[call].args[0].data)["messages"]
+RECORDED_TEXT_STREAM = Path(__file__).resolve().parents[3] / "engine" / "tests" / "fixtures" / "text.sse"
 
 
 @mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key", "OPENROUTER_MODEL": "test/requested"})
-class ChatSessionApiTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user("ada@example.com", "pw-unused-123")
-        self.client = APIClient()
-        self.client.force_authenticate(self.user)
-
-    def create_session(self, client=None):
-        response = (client or self.client).post(SESSIONS_URL)
-        self.assertEqual(response.status_code, 201)
-        return response.data["id"]
-
-    def send(self, session_id, content, answer="Hi there", model="vendor/model-a"):
-        with mock.patch("urllib.request.urlopen", return_value=reply(answer, model)) as urlopen:
-            response = self.client.post(messages_url(session_id), {"content": content}, format="json")
-        return response, urlopen
-
+class ChatSessionApiTests(ChatTestCase):
     def test_requires_sign_in(self):
         session_id = self.create_session()
         anonymous = APIClient()
@@ -69,6 +34,7 @@ class ChatSessionApiTests(TestCase):
         self.assertEqual(anonymous.post(SESSIONS_URL).status_code, 401)
         self.assertEqual(anonymous.get(session_url(session_id)).status_code, 401)
         self.assertEqual(anonymous.post(messages_url(session_id), {"content": "Hi"}, format="json").status_code, 401)
+        self.assertEqual(anonymous.post(reply_url(session_id), {}, format="json").status_code, 401)
         self.assertEqual(anonymous.delete(session_url(session_id)).status_code, 401)
 
     def test_create_returns_an_empty_session(self):
@@ -78,56 +44,81 @@ class ChatSessionApiTests(TestCase):
         self.assertIsNone(response.data["title"])
         self.assertEqual(response.data["messages"], [])
 
-    def test_send_saves_the_message_and_the_reply(self):
+    def test_send_streams_the_reply_and_saves_both_messages(self):
         session_id = self.create_session()
-        response, _ = self.send(session_id, "Hello", answer="Hi there", model="vendor/model-a")
-        self.assertEqual(response.status_code, 201)
-        saved = [(m["role"], m["content"], m["model"]) for m in response.data["messages"]]
-        self.assertEqual(saved, [("user", "Hello", None), ("assistant", "Hi there", "vendor/model-a")])
+        response, events, _ = self.send(session_id, "Hello", reply("Hi there", model="vendor/model-a"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/event-stream")
+        self.assertEqual(response["Cache-Control"], "no-cache")
+        self.assertEqual(response["X-Accel-Buffering"], "no")
+        self.assertEqual(names(events), ["user_message", "delta", "delta", "assistant_message", "done"])
+        self.assertEqual("".join(d["text"] for d in data(events, "delta")), "Hi there")
 
-        detail = self.client.get(session_url(session_id)).data
-        self.assertEqual(detail["messages"], response.data["messages"])
-        self.assertEqual(detail["title"], "Hello")
-
-    def test_send_gives_the_model_the_whole_history(self):
-        session_id = self.create_session()
-        self.send(session_id, "Hello", answer="Hi there")
-        _, urlopen = self.send(session_id, "What is a tool call?")
+        saved = self.messages(session_id)
         self.assertEqual(
-            sent_messages(urlopen),
-            [
-                {"role": "user", "content": "Hello"},
-                {"role": "assistant", "content": "Hi there"},
-                {"role": "user", "content": "What is a tool call?"},
-            ],
+            [(m["role"], m["content"], m["model"]) for m in saved],
+            [("user", "Hello", None), ("assistant", "Hi there", "vendor/model-a")],
         )
+        self.assertEqual(data(events, "user_message"), [saved[0]])
+        self.assertEqual(data(events, "assistant_message"), [saved[1]])
+        self.assertEqual(self.client.get(session_url(session_id)).data["title"], "Hello")
+
+    def test_the_model_reads_the_system_prompt_and_the_whole_history(self):
+        session_id = self.create_session()
+        self.send(session_id, "Hello", reply("Hi there"))
+        _, _, model = self.send(session_id, "What is a tool call?", reply("A step."))
+        messages = model.sent[0][0]
+        self.assertIsInstance(messages[0], SystemMessage)
+        self.assertEqual(
+            messages[1:],
+            [UserMessage("Hello"), AssistantMessage("Hi there"), UserMessage("What is a tool call?")],
+        )
+
+    def test_the_system_prompt_gives_the_time_in_the_users_time_zone(self):
+        session_id = self.create_session()
+        now = datetime(2026, 11, 22, 6, 5, tzinfo=UTC)
+        with mock.patch("django.utils.timezone.now", return_value=now):
+            _, _, model = self.send(session_id, "Hello", reply("Hi"), time_zone="Asia/Jakarta")
+        prompt = model.sent[0][0][0].content
+        self.assertIn("It is Sunday 2026-11-22 13:05 in the user's time zone, Asia/Jakarta.", prompt)
+        self.assertIn("2026-11-22T06:05Z", prompt)
+
+    def test_an_unknown_time_zone_falls_back_to_utc(self):
+        session_id = self.create_session()
+        for time_zone in ("Mars/Olympus_Mons", "../../etc/passwd", ""):
+            with self.subTest(time_zone=time_zone):
+                _, _, model = self.send(session_id, "Hello", reply("Hi"), time_zone=time_zone)
+                self.assertIn("in the user's time zone, UTC.", model.sent[0][0][0].content)
+
+    def test_the_configured_openrouter_model_streams_through(self):
+        session_id = self.create_session()
+        stream = io.BytesIO(RECORDED_TEXT_STREAM.read_bytes())
+        with mock.patch("urllib.request.urlopen", return_value=stream) as urlopen:
+            events = read_events(self.client.post(messages_url(session_id), {"content": "Hello"}, format="json"))
         request = urlopen.call_args.args[0]
         self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
-        self.assertEqual(json.loads(request.data)["model"], "test/requested")
-
-    def test_reply_without_a_model_records_the_requested_model(self):
-        session_id = self.create_session()
-        response, _ = self.send(session_id, "Hello", model=None)
-        self.assertEqual(response.data["messages"][1]["model"], "test/requested")
+        self.assertIn(b'"model": "test/requested"', request.data)
+        self.assertGreater(len(data(events, "delta")), 1)
+        self.assertEqual(data(events, "assistant_message")[0]["content"], "Hello! Nice to meet you today.")
 
     def test_detail_lists_messages_in_the_order_they_were_sent(self):
         session_id = self.create_session()
-        self.send(session_id, "First", answer="Reply one")
-        self.send(session_id, "Second", answer="Reply two")
-        detail = self.client.get(session_url(session_id)).data
+        self.send(session_id, "First", reply("Reply one"))
+        self.send(session_id, "Second", reply("Reply two"))
+        detail = self.messages(session_id)
         self.assertEqual(
-            [(m["role"], m["content"]) for m in detail["messages"]],
+            [(m["role"], m["content"]) for m in detail],
             [("user", "First"), ("assistant", "Reply one"), ("user", "Second"), ("assistant", "Reply two")],
         )
-        self.assertEqual(set(detail["messages"][0]), {"id", "role", "content", "model", "created_at", "tool_calls"})
+        self.assertEqual(set(detail[0]), {"id", "role", "content", "model", "created_at", "tool_calls"})
 
     def test_list_puts_the_latest_activity_first_with_a_title_from_the_first_message(self):
         older = self.create_session()
         newer = self.create_session()
-        self.send(newer, "x" * 200)
+        self.send(newer, "x" * 200, reply("Hi"))
         empty = self.create_session()
-        self.send(older, "Plan a trip")
-        self.send(older, "Add a day in Lisbon")
+        self.send(older, "Plan a trip", reply("Where to?"))
+        self.send(older, "Add a day in Lisbon", reply("Done."))
 
         sessions = self.client.get(SESSIONS_URL).data
         self.assertEqual([s["id"] for s in sessions], [older, empty, newer])
@@ -146,16 +137,15 @@ class ChatSessionApiTests(TestCase):
 
     def test_another_users_session_is_not_found(self):
         session_id = self.create_session()
-        self.send(session_id, "Hello")
-        intruder = APIClient()
-        intruder.force_authenticate(User.objects.create_user("grace@example.com", "pw-unused-123"))
-        with mock.patch("urllib.request.urlopen") as urlopen:
-            self.assertEqual(intruder.get(session_url(session_id)).status_code, 404)
-            response = intruder.post(messages_url(session_id), {"content": "Hi"}, format="json")
-            self.assertEqual(response.status_code, 404)
-            self.assertEqual(intruder.delete(session_url(session_id)).status_code, 404)
-        urlopen.assert_not_called()
-        self.assertEqual(len(self.client.get(session_url(session_id)).data["messages"]), 2)
+        self.send(session_id, "Hello", reply("Hi"))
+        self.client.force_authenticate(User.objects.create_user("grace@example.com", "pw-unused-123"))
+        self.assertEqual(self.client.get(session_url(session_id)).status_code, 404)
+        response, _, model = self.send(session_id, "Hi")
+        self.assertEqual(response.status_code, 404)
+        response, _, _ = self.stream(reply_url(session_id), {})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.client.delete(session_url(session_id)).status_code, 404)
+        self.assertEqual(ChatMessage.objects.filter(session_id=session_id).count(), 2)
 
     def test_unknown_session_is_not_found(self):
         self.assertEqual(self.client.get(session_url(999999)).status_code, 404)
@@ -163,25 +153,20 @@ class ChatSessionApiTests(TestCase):
 
     def test_delete_removes_the_session_and_its_messages(self):
         session_id = self.create_session()
-        self.send(session_id, "Hello")
+        self.send(session_id, "Hello", reply("Hi"))
         self.assertEqual(self.client.delete(session_url(session_id)).status_code, 204)
         self.assertEqual(self.client.get(session_url(session_id)).status_code, 404)
         self.assertEqual(self.client.get(SESSIONS_URL).data, [])
         self.assertFalse(ChatMessage.objects.filter(session_id=session_id).exists())
 
-    def test_blank_content_is_rejected(self):
+    def test_blank_content_is_rejected_before_the_model_is_called(self):
         session_id = self.create_session()
-        with mock.patch("urllib.request.urlopen") as urlopen:
-            for body in ({"content": "   "}, {"content": ""}, {}):
-                response = self.client.post(messages_url(session_id), body, format="json")
-                self.assertEqual(response.status_code, 400, body)
-        urlopen.assert_not_called()
-        self.assertEqual(self.client.get(session_url(session_id)).data["messages"], [])
-
-    def assert_nothing_saved(self, session_id, before):
-        after = self.client.get(session_url(session_id)).data
-        self.assertEqual(after["messages"], before["messages"])
-        self.assertEqual(after["updated_at"], before["updated_at"])
+        for body in ({"content": "   "}, {"content": ""}, {}):
+            with self.subTest(body=body):
+                response, _, model = self.stream(messages_url(session_id), body)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(model.sent, [])
+        self.assertEqual(self.messages(session_id), [])
 
     @mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": ""})
     def test_without_an_api_key_nothing_is_saved(self):
@@ -190,35 +175,49 @@ class ChatSessionApiTests(TestCase):
         response = self.client.post(messages_url(session_id), {"content": "Hello"}, format="json")
         self.assertEqual(response.status_code, 503)
         self.assertIn("OPENROUTER_API_KEY", response.data["detail"])
-        self.assert_nothing_saved(session_id, before)
+        after = self.client.get(session_url(session_id)).data
+        self.assertEqual((after["messages"], after["updated_at"]), ([], before["updated_at"]))
 
-    def test_upstream_error_saves_nothing(self):
+    def test_a_reply_that_fails_midway_keeps_the_users_message(self):
         session_id = self.create_session()
-        before = self.client.get(session_url(session_id)).data
-        refused = urllib.error.HTTPError("url", 429, "Too Many Requests", {}, io.BytesIO(b"rate limited"))
-        with mock.patch("urllib.request.urlopen", side_effect=refused), self.assertLogs("apps.agents.openrouter"):
-            response = self.client.post(messages_url(session_id), {"content": "Hello"}, format="json")
-        self.assertEqual(response.status_code, 502)
-        self.assert_nothing_saved(session_id, before)
+        _, events, _ = self.send(session_id, "Hello", [TextDelta("Hel"), ModelError("Cannot reach OpenRouter.")])
+        self.assertEqual(names(events), ["user_message", "delta", "error", "done"])
+        self.assertEqual(data(events, "error"), [{"detail": "Cannot reach OpenRouter.", "status": 502}])
+        self.assertEqual([(m["role"], m["content"]) for m in self.messages(session_id)], [("user", "Hello")])
 
-    def test_unreachable_openrouter_logs_the_reason_and_saves_nothing(self):
+    def test_reply_answers_the_message_whose_reply_failed(self):
         session_id = self.create_session()
-        before = self.client.get(session_url(session_id)).data
-        failure = urllib.error.URLError("certificate verify failed")
-        with mock.patch("urllib.request.urlopen", side_effect=failure), self.assertLogs("apps.agents.openrouter") as logs:
-            response = self.client.post(messages_url(session_id), {"content": "Hello"}, format="json")
-        self.assertEqual(response.status_code, 502)
-        self.assertIn("certificate verify failed", logs.output[0])
-        self.assert_nothing_saved(session_id, before)
+        self.send(session_id, "Hello", [ModelError("Cannot reach OpenRouter.")])
+        response, events, model = self.stream(reply_url(session_id), {"time_zone": "UTC"}, reply("Hi again"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(names(events), ["delta", "delta", "assistant_message", "done"])
+        self.assertEqual(model.sent[0][0][1:], [UserMessage("Hello")])
+        self.assertEqual(
+            [(m["role"], m["content"]) for m in self.messages(session_id)], [("user", "Hello"), ("assistant", "Hi again")]
+        )
 
-    def test_session_deleted_while_the_model_answers_saves_nothing(self):
+    def test_reply_refuses_when_there_is_nothing_to_answer(self):
+        session_id = self.create_session()
+        response, _, _ = self.stream(reply_url(session_id), {})
+        self.assertEqual(response.status_code, 409)
+        self.send(session_id, "Hello", reply("Hi"))
+        response, _, model = self.stream(reply_url(session_id), {})
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("answered already", response.data["detail"])
+        self.assertEqual(model.sent, [])
+
+    def test_session_deleted_while_the_model_answers_saves_nothing_more(self):
         session_id = self.create_session()
 
-        def delete_then_reply(*args, **kwargs):
+        def delete_then_answer():
             self.client.delete(session_url(session_id))
-            return reply("Too late")
+            yield TextDelta("Too late")
 
-        with mock.patch("urllib.request.urlopen", side_effect=delete_then_reply):
-            response = self.client.post(messages_url(session_id), {"content": "Hello"}, format="json")
-        self.assertEqual(response.status_code, 404)
+        def stream(**kwargs):
+            yield from delete_then_answer()
+            yield from reply("Too late")[-1:]
+
+        with mock.patch("engine.testing.FakeClient.stream", side_effect=stream):
+            _, events, _ = self.send(session_id, "Hello")
+        self.assertEqual(data(events, "error"), [{"detail": "This chat was deleted.", "status": 404}])
         self.assertFalse(ChatMessage.objects.filter(session_id=session_id).exists())

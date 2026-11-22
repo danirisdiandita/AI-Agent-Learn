@@ -1,3 +1,5 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from rest_framework import serializers
 
 from ..models import ChatMessage, ChatSession, ChatToolCall
@@ -32,5 +34,31 @@ class ChatSessionDetailSerializer(ChatSessionSerializer):
         fields = [*ChatSessionSerializer.Meta.fields, "messages"]
 
 
+class TimeZoneField(serializers.CharField):
+    """The browser's IANA time zone. It only tells the model the user's local time, so an unknown one becomes UTC."""
+
+    def __init__(self, **kwargs):
+        super().__init__(required=False, allow_blank=True, default="UTC", **kwargs)
+
+    def run_validation(self, data=serializers.empty):
+        # CharField returns a blank value before to_internal_value, so check the name here.
+        name = super().run_validation(data)
+        try:
+            ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            return "UTC"
+        return name
+
+
 class SendMessageSerializer(serializers.Serializer):
     content = serializers.CharField()
+    time_zone = TimeZoneField()
+
+
+class DecisionSerializer(serializers.Serializer):
+    approve = serializers.BooleanField()
+    time_zone = TimeZoneField()
+
+
+class ReplySerializer(serializers.Serializer):
+    time_zone = TimeZoneField()

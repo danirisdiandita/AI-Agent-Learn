@@ -94,3 +94,14 @@ The agent loop lives in `backend/engine/`, a plain Python package that never imp
 - `engine/tests/` holds unit tests that need no database. `manage.py test` runs them with the app tests. `engine/tests/fixtures/` holds streams recorded from OpenRouter.
 
 An app that runs the loop turns its models into these types, passes a model client and the tools the user may use, and saves every step that `run()` yields. Model provider SDKs and HTTP clients belong behind `ModelClient`, so tests never call a real model. Read API keys from the `providers` app or the environment, never from code.
+
+## The Agents chat
+
+The chat in `apps/agents/` is the first caller of the engine. It saves every step, so the conversation the model reads is rebuilt from the database on each request.
+
+- **Data.** `agents_chat_message` holds each user message and each model step. `agents_chat_tool_call` holds each tool call a step asked for, under that step's message, with `status` (`pending`, `approved` while the tool runs, `declined`, `succeeded`, `failed`), the `result` the model reads, and `decided_at`. A reply that only calls tools has empty `content`. `services._history` turns the rows back into engine messages: each reply with its calls, then one `ToolMessage` per call.
+- **Tools.** `apps/agents/tools.py` lists each tool once in `TOOLS`, as a `ToolDefinition`: the `ToolSpec`, `requires_approval`, `available(user)`, the system prompt's note for when the tool is offered and for when it is not, `prepare`, and `execute`. `tools.offer()` binds the available tools to the user, so the model only sees tools the user can use. To add a tool, add a `ToolDefinition` to `TOOLS`; no service changes.
+- **Streams.** `services.send_message`, `services.reply`, and `services.decide_tool_call` check every precondition and save what the user did before they return, so a refusal is a plain exception that the view answers as JSON. They then return an iterator of events, which the view sends as server-sent events (`api/views.py` lists them). Each model step is saved in one transaction when it finishes.
+- **Approval.** A pending call blocks new messages in its session (409). A decision locks the call's row with `select_for_update`, so a second decision gets 409. An approved call runs before the stream starts, after `tools.run_approved` checks again that the tool is available, so a client that leaves mid-stream cannot leave it unrun. The model's follow-up starts once every call of the step is decided.
+- **No transaction across a network call.** The model and Google are called outside `transaction.atomic()`. A session row lock lasts only while a step or a message is written.
+- **Tests.** `apps/agents/tests/streams.py` posts to the streaming endpoints with `engine.testing.FakeClient` in place of the model and reads the events back. `apps/integrations/tests/fake_google.py` stands in for Google.
