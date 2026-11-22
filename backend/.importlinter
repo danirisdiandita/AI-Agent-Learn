@@ -35,5 +35,6 @@ layers =
     (agents)
     (knowledge)
     (tools)
+    integrations
     (providers)
     accounts

@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.accounts",
     "apps.agents",
+    "apps.integrations",
     # new-backend-app: apps above
 ]
 
@@ -91,6 +92,17 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": False,
 }
+
+# Integrations. Google Calendar stays unconfigured until both client values are set.
+# The redirect URI must match one listed on the OAuth client in Google Cloud Console.
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_REDIRECT_URI = (
+    os.environ.get("GOOGLE_OAUTH_REDIRECT_URI")
+    or "http://localhost:5174/api/v1/integrations/google-calendar/callback/"
+)
+# Fernet key that encrypts stored OAuth tokens. Changing it makes every stored token unreadable.
+INTEGRATIONS_ENCRYPTION_KEY = os.environ.get("INTEGRATIONS_ENCRYPTION_KEY", "")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

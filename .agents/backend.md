@@ -20,6 +20,7 @@ backend/
 │       │   └── urls.py
 │       ├── admin.py
 │       ├── apps.py         name = "apps.<domain>", label = "<domain>"
+│       ├── <module>.py     Optional plain modules, such as a client for an outside API (integrations/google.py)
 │       ├── migrations/
 │       └── tests/          test_api.py, test_services.py, test_selectors.py
 ├── app_template/           Template that scripts/new-backend-app.sh renders
@@ -55,15 +56,16 @@ These rules need judgment, so no script checks them:
 
 ## Domain map
 
-`accounts` exists today. The other apps are planned. Create each one with the generator when its first feature starts, not before. The list is in dependency order: each app may depend on the apps below it.
+`accounts` and `integrations` exist today. The other apps are planned. Create each one with the generator when its first feature starts, not before. The list is in dependency order: each app may depend on the apps below it.
 
 | Order | App | Owns |
 | --- | --- | --- |
-| 7 | `evals` | Eval datasets and cases, eval runs, graders, and scores |
-| 6 | `runs` | Runs of an agent: conversations, messages, each step and tool call in order, token use, cost, and errors |
-| 5 | `agents` | Agent definitions: model, instructions, sampling settings, the tools and knowledge each agent may use, and their versions |
-| 4 | `knowledge` | Knowledge bases, uploaded documents, chunks, embeddings, and retrieval settings |
-| 3 | `tools` | Tool definitions with their JSON schemas, HTTP tools, and connected MCP servers |
+| 8 | `evals` | Eval datasets and cases, eval runs, graders, and scores |
+| 7 | `runs` | Runs of an agent: conversations, messages, each step and tool call in order, token use, cost, and errors |
+| 6 | `agents` | Agent definitions: model, instructions, sampling settings, the tools and knowledge each agent may use, and their versions |
+| 5 | `knowledge` | Knowledge bases, uploaded documents, chunks, embeddings, and retrieval settings |
+| 4 | `tools` | Tool definitions with their JSON schemas, HTTP tools, and connected MCP servers |
+| 3 | `integrations` | Connected third-party accounts (OAuth tokens) such as Google Calendar |
 | 2 | `providers` | Model providers, encrypted API keys, and the models each provider offers |
 | 1 | `accounts` | Users, sign-in, and JWT tokens |
 
