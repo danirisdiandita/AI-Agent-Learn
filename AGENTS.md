@@ -24,6 +24,7 @@ Nextsci Agents is an open-source platform for building, running, and inspecting 
 - `scripts/screenshot.mjs` — full-page screenshot of a running app at an exact width, including widths under 500px (`LOCAL_STORAGE` seeds a signed-in session for screens behind sign-in)
 - `scripts/e2e/theme.mjs` — end-to-end test of the System, Light, and Dark theme switch against the running dashboard
 - `scripts/e2e-dashboard.sh` — end-to-end dashboard test in Chrome against a throwaway database: sign-in, URL routing (deep links, the sign-in redirect, back, reload, not-found), the sidebar, the theme switch, the Integrations screen and its connect callback, and sign-out with its confirmation dialog (`COLOR_SCHEME=light|dark` sets the screenshots' theme; `E2E_API_PORT`, `E2E_DASH_PORT`, `E2E_CDP_PORT` move its ports); drives `scripts/e2e/signin.mjs`
+- `scripts/make-oauth-client.sh [project-id]` — sets up the Google Calendar OAuth client: gcloud signs in, creates the project if missing, and enables the Calendar API, then the script opens the Console pages for the consent screen and the Web client (Google has no CLI or API for that client), and writes `GOOGLE_OAUTH_*` and a missing `INTEGRATIONS_ENCRYPTION_KEY` into `.env`. Safe to rerun
 - `scripts/check-docs.sh` — fails when a doc in `.agents/` is not indexed or a relative markdown link breaks; `scripts/check.sh` runs it
 - `compose.yaml` — runs Postgres, backend, and dashboard together
 - `.env.example` — every config variable; copy to `.env` (gitignored)
