@@ -89,7 +89,7 @@ check('each screen has its own document title', (await js('document.title')) ===
 let bar = await sidebar()
 check('sidebar starts expanded with the Agents label showing', bar?.state === 'expanded' && bar.width > 200 && bar.agentsLabelVisible, JSON.stringify(bar))
 await go(base); await atUrl('/agents'); t = await text()
-check('/ opens on Agents when signed in', (await url()) === '/agents' && (await heading()) === 'Agents' && t.includes('No agents yet'), `${await url()} ${await heading()}`)
+check('/ opens on Agents when signed in', (await url()) === '/agents' && (await heading()) === 'Agents' && t.includes('Chat with a model'), `${await url()} ${await heading()}`)
 await shot('dash-home')
 
 for (const theme of ['light', 'dark']) {
