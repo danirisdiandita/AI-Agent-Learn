@@ -4,55 +4,36 @@ Each service is a function with keyword-only arguments. It validates, writes, an
 Wrap multi-step writes in transaction.atomic(). The api layer and other apps call these; they never write models directly.
 """
 
-import json
-import logging
-import os
-import ssl
-import urllib.error
-import urllib.request
+from django.db import transaction
+from django.utils import timezone
 
-import certifi
-
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "openrouter/auto"
-# python.org builds of Python on macOS ship without CA certificates, so verify against certifi's bundle.
-TLS = ssl.create_default_context(cafile=certifi.where())
-
-logger = logging.getLogger(__name__)
+from . import openrouter
+from .models import ChatMessage, ChatRole, ChatSession
 
 
-class ChatError(Exception):
-    """A chat request that failed. `status` is the HTTP status the API returns, the message is for the user."""
-
-    def __init__(self, message, *, status):
-        super().__init__(message)
-        self.status = status
+def create_chat_session(*, user):
+    return ChatSession.objects.create(user=user)
 
 
-def chat(*, messages):
-    """Sends the conversation to OpenRouter and returns the reply as {"role": "assistant", "content": str}."""
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
-    if not api_key:
-        raise ChatError("Set OPENROUTER_API_KEY in .env, then restart the backend.", status=503)
-    request = urllib.request.Request(
-        OPENROUTER_URL,
-        data=json.dumps(
-            {"model": os.environ.get("OPENROUTER_MODEL") or DEFAULT_MODEL, "messages": messages}
-        ).encode(),
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60, context=TLS) as response:
-            body = json.load(response)
-    except urllib.error.HTTPError as error:
-        logger.warning("OpenRouter answered HTTP %s: %s", error.code, error.read()[:500])
-        raise ChatError(f"OpenRouter refused the request (HTTP {error.code}).", status=502) from error
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
-        logger.warning("Cannot reach OpenRouter: %r", error)
-        raise ChatError("Cannot reach OpenRouter.", status=502) from error
-    try:
-        content = body["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as error:
-        raise ChatError("OpenRouter sent an unexpected response.", status=502) from error
-    return {"role": "assistant", "content": content or ""}
+def delete_chat_session(*, user, session_id):
+    """Deletes one of the user's sessions with its messages. Returns False when the user has no such session."""
+    deleted, _ = ChatSession.objects.filter(user=user, pk=session_id).delete()
+    return deleted > 0
+
+
+def send_chat_message(*, session, content):
+    """Sends the session's messages and `content` to the model, then saves `content` and the reply.
+
+    Returns the saved user message and assistant message. Raises openrouter.ChatError when the model call fails, and
+    then saves nothing. The model call runs outside any transaction, so it holds no database lock while it waits.
+    """
+    history = [{"role": message.role, "content": message.content} for message in session.messages.all()]
+    reply = openrouter.complete(messages=[*history, {"role": ChatRole.USER, "content": content}])
+    with transaction.atomic():
+        # Updating the session first locks its row, so two sends to one session save their pairs one after the other.
+        if not ChatSession.objects.filter(pk=session.pk).update(updated_at=timezone.now()):
+            raise openrouter.ChatError("This chat was deleted.", status=404)
+        return [
+            ChatMessage.objects.create(session=session, role=ChatRole.USER, content=content),
+            ChatMessage.objects.create(session=session, role=ChatRole.ASSISTANT, content=reply.content, model=reply.model),
+        ]

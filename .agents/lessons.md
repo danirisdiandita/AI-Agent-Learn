@@ -32,7 +32,7 @@ Each entry is a mistake that this project already made. It gives the symptom you
 
 - **Symptom.** The Agents chat answers 502 "Cannot reach OpenRouter", while `curl` reaches the same URL.
 - **Cause.** The python.org installer for macOS ships Python without CA certificates, so `urllib` fails with `CERTIFICATE_VERIFY_FAILED`. The service caught that as a generic network error and logged nothing.
-- **Do.** Pass `ssl.create_default_context(cafile=certifi.where())` to every outbound `urlopen`, as `apps/agents/services.py` does. Log the underlying exception before turning it into a user-facing error.
+- **Do.** Pass `ssl.create_default_context(cafile=certifi.where())` to every outbound `urlopen`, as `apps/agents/openrouter.py` does. Log the underlying exception before turning it into a user-facing error.
 
 ## Dashboard
 
