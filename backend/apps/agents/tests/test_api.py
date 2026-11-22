@@ -1,5 +1,6 @@
 import json
 import os
+import urllib.error
 from unittest import mock
 
 from django.test import TestCase
@@ -54,3 +55,11 @@ class ChatApiTests(TestCase):
         sent = urlopen.call_args.args[0]
         self.assertEqual(sent.get_header("Authorization"), "Bearer test-key")
         self.assertEqual(json.loads(sent.data), {"model": "test/model", "messages": MESSAGES})
+
+    @mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
+    def test_unreachable_openrouter_logs_the_reason(self):
+        failure = urllib.error.URLError("certificate verify failed")
+        with mock.patch("urllib.request.urlopen", side_effect=failure), self.assertLogs("apps.agents.services") as logs:
+            response = self.client.post(CHAT_URL, {"messages": MESSAGES}, format="json")
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("certificate verify failed", logs.output[0])

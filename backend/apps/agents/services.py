@@ -5,12 +5,20 @@ Wrap multi-step writes in transaction.atomic(). The api layer and other apps cal
 """
 
 import json
+import logging
 import os
+import ssl
 import urllib.error
 import urllib.request
 
+import certifi
+
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "openrouter/auto"
+# python.org builds of Python on macOS ship without CA certificates, so verify against certifi's bundle.
+TLS = ssl.create_default_context(cafile=certifi.where())
+
+logger = logging.getLogger(__name__)
 
 
 class ChatError(Exception):
@@ -35,11 +43,13 @@ def chat(*, messages):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=60, context=TLS) as response:
             body = json.load(response)
     except urllib.error.HTTPError as error:
+        logger.warning("OpenRouter answered HTTP %s: %s", error.code, error.read()[:500])
         raise ChatError(f"OpenRouter refused the request (HTTP {error.code}).", status=502) from error
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        logger.warning("Cannot reach OpenRouter: %r", error)
         raise ChatError("Cannot reach OpenRouter.", status=502) from error
     try:
         content = body["choices"][0]["message"]["content"]
