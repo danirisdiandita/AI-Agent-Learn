@@ -49,6 +49,14 @@ The dashboard builds its interface from [shadcn/ui](https://ui.shadcn.com) compo
 	node scripts/screenshot.mjs http://localhost:5174/ /tmp/dashboard-390.png 390
 	```
 
+	A screen behind sign-in needs a session. Get one from the API and pass it in `LOCAL_STORAGE`:
+
+	```bash
+	session=$(curl -s -X POST -H 'Content-Type: application/json' -d '{"email":"<email>","password":"<password>"}' http://localhost:5174/api/v1/auth/token/)
+	LOCAL_STORAGE=$(SESSION="$session" node -e 'console.log(JSON.stringify({"nextsci-agents.session": process.env.SESSION}))') \
+	  node scripts/screenshot.mjs http://localhost:5174/agents /tmp/agents-1280.png 1280
+	```
+
 	The script prints a warning when the page scrolls sideways. Use it rather than Chrome's `--window-size`, which cannot go below 500px.
 3. Capture both themes. Prefix the command with `COLOR_SCHEME=light` or `COLOR_SCHEME=dark` to emulate the OS setting, and look at each.
 4. If you changed `design.css`, capture the sign-in screen and a shell screen. A token change shows up on both.

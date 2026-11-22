@@ -5,7 +5,7 @@
 Define an agent on the web: its model, instructions, tools, and knowledge. The server runs it. Follow every step of each run, with its tool calls and token use.
 
 > [!NOTE]
-> The project is at an early stage. The API server and the dashboard run and talk to PostgreSQL, and the dashboard has sign-in and an empty shell, but no agent features exist yet.
+> The project is at an early stage. The API server and the dashboard run and talk to PostgreSQL, and the dashboard has sign-in, an empty shell, and a Google Calendar integration that a user can connect, but no agent features exist yet.
 
 ## Architecture
 

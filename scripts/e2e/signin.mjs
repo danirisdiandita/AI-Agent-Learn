@@ -55,6 +55,28 @@ const back = async () => { await js('history.back(), true') }
 const RAISED = { light: 'rgb(245, 246, 247)', dark: 'rgb(14, 15, 16)' }
 const sidebarBg = () => js('getComputedStyle(document.querySelector("[data-slot=sidebar-inner]")).backgroundColor')
 const pressedTheme = () => js(`document.querySelector('[aria-label$=" theme"][aria-pressed="true"]')?.getAttribute('aria-label')`)
+const confirmDialog = () => js('document.querySelector("[role=alertdialog]")?.textContent')
+const dialogButton = (label) => `[...document.querySelectorAll('[role=alertdialog] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
+// The Agents chat. scripts/e2e/seed-chats.py saves two chats with these titles, the newer one second.
+const OLDER = 'What is a tool call?'
+const NEWER = 'Write a system prompt for a support agent'
+const chatLinks = (scope) => `[...document.querySelectorAll('${scope} nav[aria-label=Chats] li a')]`
+const chatTitles = (scope = 'aside') => js(`${chatLinks(scope)}.map((a) => a.querySelector('span').textContent)`)
+const chatLink = (title, scope = 'aside') => `${chatLinks(scope)}.find((a) => a.querySelector('span').textContent === ${JSON.stringify(title)})`
+const deleteButton = (title) => `${chatLink(title)}?.parentElement.querySelector('button[aria-label^="Delete"]')`
+const transcript = () => js(`[...document.querySelectorAll('main ol > li')].map((li) => li.innerText)`)
+const transcriptHas = (n) => until(`document.querySelectorAll('main ol > li').length === ${n}`)
+const composer = `document.querySelector('textarea[aria-label=Message]')`
+// Types into the composer the way React sees typing, then submits it.
+const sendMessage = (text) => js(`(() => {
+  const t = ${composer}
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(t, ${JSON.stringify(text)})
+  t.dispatchEvent(new Event('input', { bubbles: true }))
+  t.form.requestSubmit()
+  return true
+})()`)
+const currentSection = () => js(`document.querySelector('[data-slot=sidebar] [aria-current=page]')?.textContent`)
+const reload = async () => { await send('Page.reload'); await sleep(300); await until('document.querySelector("form, [data-slot=sidebar-wrapper]")') }
 let failed = 0
 const check = (label, cond, detail) => {
   if (!cond) failed++
@@ -89,8 +111,71 @@ check('each screen has its own document title', (await js('document.title')) ===
 let bar = await sidebar()
 check('sidebar starts expanded with the Agents label showing', bar?.state === 'expanded' && bar.width > 200 && bar.agentsLabelVisible, JSON.stringify(bar))
 await go(base); await atUrl('/agents'); t = await text()
-check('/ opens on Agents when signed in', (await url()) === '/agents' && (await heading()) === 'Agents' && t.includes('No agents yet'), `${await url()} ${await heading()}`)
+check('/ opens on Agents when signed in', (await url()) === '/agents' && (await heading()) === 'Agents' && t.includes('Chat with a model'), `${await url()} ${await heading()}`)
 await shot('dash-home')
+
+await until(`${chatLinks('aside')}.length === 2`)
+check('the chat list shows the saved chats, latest first', JSON.stringify(await chatTitles()) === JSON.stringify([NEWER, OLDER]), JSON.stringify(await chatTitles()))
+await clickAt(chatLink(OLDER)); await until('/^\\/agents\\/\\d+$/.test(location.pathname)'); await transcriptHas(4)
+const olderUrl = await url()
+let said = await transcript()
+check('opening a chat shows its messages at its own address', said.length === 4 && said[0].includes(OLDER) && said[1].startsWith('e2e/seeded-model'), `${olderUrl} ${JSON.stringify(said)}`)
+check(
+  'Agents stays the current section on a chat address, and the list marks the chat',
+  (await heading()) === 'Agents' && (await currentSection()) === 'Agents' && (await js(`${chatLink(OLDER)}.getAttribute('aria-current')`)) === 'page',
+  `${await heading()} ${await currentSection()}`,
+)
+await reload(); await transcriptHas(4)
+said = await transcript()
+check('a chat survives a reload', (await url()) === olderUrl && said.length === 4 && said[3].includes('The backend runs it.'), `${await url()} ${JSON.stringify(said)}`)
+await shot('dash-agents-chat')
+
+await sendMessage('Is this saved?'); await until(`document.querySelector('main [role=alert]')`)
+const sendError = await js(`document.querySelector('main [role=alert]')?.textContent`)
+check('with no model key, sending says how to set one and keeps the draft', sendError?.includes('OPENROUTER_API_KEY') && (await js(`${composer}.value`)) === 'Is this saved?', sendError)
+await reload(); await transcriptHas(4)
+check('a failed send saves nothing', (await transcript()).length === 4, JSON.stringify(await transcript()))
+
+await clickAt(`[...document.querySelectorAll('aside nav[aria-label=Chats] a')].find((a) => a.textContent.trim() === 'New chat')`); await atUrl('/agents')
+await sendMessage('Start a new chat'); await until(`document.querySelector('main [role=alert]')`)
+check('a failed first message stays on /agents and keeps the draft', (await url()) === '/agents' && (await js(`${composer}.value`)) === 'Start a new chat', await url())
+await reload(); await until(`${chatLinks('aside')}.length >= 2`); await sleep(300)
+check('a failed first message leaves no empty chat behind', (await chatTitles()).length === 2, JSON.stringify(await chatTitles()))
+
+await go(`${base}agents/999999`); await until(`document.body.innerText.includes('Chat not found')`)
+check('an unknown chat id says so inside Agents', (await text()).includes('Chat not found') && (await currentSection()) === 'Agents', await text())
+
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
+// A touch screen has no hover, so the delete buttons show without it.
+await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
+await go(new URL(olderUrl, base).href); await transcriptHas(4)
+const chatTitle = await js(`document.querySelector('main h2')?.textContent`)
+check('on a phone, a chat fits the width and its title sits above it', !(await js('document.documentElement.scrollWidth > innerWidth')) && chatTitle === OLDER, chatTitle)
+await shot('dash-agents-chat-phone')
+await clickAt(`[...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Chats')`); await sleep(500)
+const sheetTitles = await chatTitles('[data-slot=sheet-content]')
+check('on a phone, the Chats button opens the list in a sheet', JSON.stringify(sheetTitles) === JSON.stringify([NEWER, OLDER]), JSON.stringify(sheetTitles))
+const deleteOpacity = await js(`[...document.querySelectorAll('[data-slot=sheet-content] button[aria-label^="Delete"]')].map((b) => getComputedStyle(b).opacity)`)
+check('on a touch screen, every chat shows its delete button', JSON.stringify(deleteOpacity) === '["1","1"]', JSON.stringify(deleteOpacity))
+await shot('dash-agents-chats-phone')
+await clickAt(chatLink(NEWER, '[data-slot=sheet-content]')); await transcriptHas(2); await sleep(500)
+const newerUrl = await url()
+check('choosing a chat in the sheet opens it and closes the sheet', newerUrl !== olderUrl && /^\/agents\/\d+$/.test(newerUrl) && !(await js('!!document.querySelector("[data-slot=sheet-content]")')), newerUrl)
+await send('Emulation.setTouchEmulationEnabled', { enabled: false })
+await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false })
+await sleep(500)
+check('with a mouse, delete buttons stay hidden until hover', (await js(`getComputedStyle(${deleteButton(OLDER)}).opacity`)) === '0')
+
+await clickAt(deleteButton(NEWER)); await sleep(400)
+check('deleting a chat asks first', (await confirmDialog())?.startsWith('Delete this chat?'), await confirmDialog())
+await shot('dash-agents-delete-confirm')
+await clickAt(dialogButton('Cancel')); await sleep(400)
+check('cancel keeps the chat', !(await confirmDialog()) && (await chatTitles()).length === 2 && (await url()) === newerUrl, await url())
+await clickAt(deleteButton(NEWER)); await sleep(400); await clickAt(dialogButton('Delete')); await atUrl('/agents')
+await until(`${chatLinks('aside')}.length === 1`)
+check('deleting the open chat removes it and opens a new chat', (await url()) === '/agents' && JSON.stringify(await chatTitles()) === JSON.stringify([OLDER]), `${await url()} ${JSON.stringify(await chatTitles())}`)
+await reload(); await until(`${chatLinks('aside')}.length >= 1`); await sleep(300)
+check('a deleted chat stays deleted after a reload', JSON.stringify(await chatTitles()) === JSON.stringify([OLDER]), JSON.stringify(await chatTitles()))
 
 for (const theme of ['light', 'dark']) {
   const label = `${theme[0].toUpperCase()}${theme.slice(1)} theme`
@@ -135,6 +220,18 @@ await pressCtrlB()
 const afterTwo = (await sidebar())?.state
 check('Ctrl+B toggles the sidebar', afterOne === 'expanded' && afterTwo === 'collapsed', `${afterOne}, ${afterTwo}`)
 
+await clickAt(navButton('Integrations')); await atUrl('/integrations')
+await until(`document.querySelector('main li h2')?.textContent === 'Google Calendar'`)
+check('clicking Integrations lists Google Calendar', (await heading()) === 'Integrations' && (await js(`document.querySelector('main li h2')?.textContent`)) === 'Google Calendar', `${await heading()} ${await text()}`)
+await shot('dash-integrations')
+// Google sends the browser to the callback through the dashboard's /api proxy. A forged state connects nothing.
+await go(`${base}api/v1/integrations/google-calendar/callback/?state=forged&code=x`)
+await atUrl('/integrations?error=expired'); await until('document.querySelector("main [role=alert]")')
+const notice = await js('document.querySelector("main [role=alert]")?.textContent')
+check('a failed connection returns to Integrations and says why', (await url()) === '/integrations?error=expired' && notice?.includes('expired'), `${await url()} ${notice}`)
+await clickAt(`document.querySelector('main [aria-label=Dismiss]')`); await atUrl('/integrations')
+check('dismissing the notice clears it from the address', (await url()) === '/integrations' && !(await js('!!document.querySelector("main [role=alert]")')), await url())
+
 await js(`(() => { const s = JSON.parse(localStorage.getItem('nextsci-agents.session')); s.access = 'expired'; localStorage.setItem('nextsci-agents.session', JSON.stringify(s)); return true })()`)
 await go(base)
 t = await text()
@@ -171,8 +268,21 @@ await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, dev
 await sleep(500)
 await clickAt('document.querySelector("[data-slot=sidebar-footer] [data-sidebar=menu-button]")'); await sleep(400)
 await shot('dash-user-menu')
-await clickAt(`[...document.querySelectorAll('[role=menuitem]')].find((i) => i.textContent.trim() === 'Sign out')`); await atUrl('/sign-in')
-check('sign out from the footer menu returns to sign-in and clears storage', (await url()) === '/sign-in' && (await text()).startsWith('Sign in to Nextsci') && (await js('localStorage.getItem("nextsci-agents.session")')) === null, await url())
+const openUserMenu = async () => { await clickAt('document.querySelector("[data-slot=sidebar-footer] [data-sidebar=menu-button]")'); await sleep(400) }
+const signOutItem = `[...document.querySelectorAll('[role=menuitem]')].find((i) => i.textContent.trim() === 'Sign out')`
+const signedIn = async () => (await url()) === '/runs' && (await js('localStorage.getItem("nextsci-agents.session")')) !== null
+await clickAt(signOutItem); await sleep(400)
+check('sign out asks for confirmation first', (await confirmDialog())?.startsWith('Sign out?') && (await signedIn()), await confirmDialog())
+await shot('dash-signout-confirm')
+await clickAt(dialogButton('Cancel')); await sleep(400)
+check('cancel closes the dialog and keeps the session', !(await confirmDialog()) && (await signedIn()), await url())
+await openUserMenu(); await clickAt(signOutItem); await sleep(400)
+for (const type of ['keyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+await sleep(400)
+check('escape closes the dialog and keeps the session', !(await confirmDialog()) && (await signedIn()), await url())
+await openUserMenu(); await clickAt(signOutItem); await sleep(400)
+await clickAt(dialogButton('Sign out')); await atUrl('/sign-in')
+check('confirming sign out returns to sign-in and clears storage', (await url()) === '/sign-in' && (await text()).startsWith('Sign in to Nextsci') && (await js('localStorage.getItem("nextsci-agents.session")')) === null, await url())
 await go(`${base}agents`)
 check('after sign out, /agents goes to sign-in', (await url()) === '/sign-in?redirect=%2Fagents', await url())
 await go(`${base}no-such-page`)

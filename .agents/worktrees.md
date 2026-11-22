@@ -13,7 +13,11 @@ ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)
 
 ## The main checkout tracks dev
 
-The main checkout, the repository folder outside `.worktrees/`, always stays on `dev` and up to date with `origin/dev`. Never commit or edit files there. `worktree.sh` keeps it in sync after every `new` and every successful `ship`. If the main checkout has uncommitted changes to tracked files, the script leaves it alone and prints a warning. Tell the user when that happens.
+The main checkout, the repository folder outside `.worktrees/`, always stays on `dev` and up to date with `origin/dev`, so whenever an agent finishes, the folder the user runs holds the latest `dev`. Never commit or edit files there. `worktree.sh` fast-forwards it after every `new`, every successful `ship`, and every `clean`.
+
+Uncommitted edits in the main checkout don't block the update. The script carries them across with `git merge --ff-only --autostash`, as long as `dev` changed none of the same files. When `dev` did change one of them, reapplying the edit could leave conflict markers, so the script leaves the checkout where it is and prints `main checkout not updated: uncommitted edits to <files> also changed on dev`. It never discards or commits the user's edits.
+
+**Finish every task with the main checkout on the latest `dev`.** The last command of every task is `worktree.sh clean`, and its last line must read `main checkout: dev at <sha>`, with `<sha>` equal to `git rev-parse --short origin/dev`. If it prints anything else, the checkout is behind. Quote that line to the user, name the files it lists, and say they need to commit or discard those edits. Never report a task as done without saying whether the main checkout is on the latest `dev`.
 
 ## Steps
 
@@ -54,5 +58,6 @@ Before you report a task as done, whether it shipped or stopped, leave nothing r
 
    It also prints a warning for any folder in `.worktrees/` that isn't a registered worktree, and fast-forwards the main checkout. It never deletes unshipped work and is safe to rerun. Branches outside `feat/` are not touched.
 4. Pass on every `kept` and `stray folder` line to the user. Don't delete them yourself; the user decides.
+5. Check the last line of `clean`. It must be `main checkout: dev at <sha>`. Otherwise pass it on as described in [The main checkout tracks dev](#the-main-checkout-tracks-dev).
 
 Run `clean` at the start of a session too, so leftovers from earlier sessions get noticed.

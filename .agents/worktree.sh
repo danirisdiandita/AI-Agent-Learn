@@ -29,10 +29,16 @@ sync_main() {
       echo "main checkout is on '$b' with local changes; not switched to dev" >&2; return 0
     fi
   fi
-  if [[ -n "$(git -C "$main_root" status --porcelain --untracked-files=no)" ]]; then
-    echo "main checkout has local changes; dev not updated" >&2; return 0
+  # Local edits ride along through --autostash, but only when dev changed none of the same files:
+  # reapplying an edit to a file dev also changed can leave conflict markers in it.
+  local overlap
+  overlap="$(comm -12 <(git -C "$main_root" diff --name-only HEAD | sort) \
+    <(git -C "$main_root" diff --name-only HEAD origin/dev | sort) | tr '\n' ' ')"
+  if [[ -n "$overlap" ]]; then
+    echo "main checkout not updated: uncommitted edits to ${overlap% } also changed on dev; commit or discard them, then run clean" >&2
+    return 0
   fi
-  git -C "$main_root" merge -q --ff-only origin/dev 2>/dev/null \
+  git -C "$main_root" merge -q --ff-only --autostash origin/dev >/dev/null 2>&1 \
     && echo "main checkout: dev at $(git -C "$main_root" rev-parse --short HEAD)" \
     || echo "main checkout dev has diverged from origin/dev; not updated" >&2
 }

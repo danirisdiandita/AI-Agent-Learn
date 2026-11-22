@@ -4,6 +4,8 @@
 // Uses device emulation, so widths under 500px are real. Chrome's --window-size cannot go below 500px.
 // Emulates prefers-reduced-motion, so the capture shows every section in its final state.
 // Set COLOR_SCHEME=light or COLOR_SCHEME=dark to emulate the OS theme. The apps follow it unless a visitor picked one.
+// Set LOCAL_STORAGE to a JSON object of keys and string values to store them on the page's origin first,
+// such as LOCAL_STORAGE='{"nextsci-agents.session": "<session JSON>"}' for a screen behind sign-in.
 // Set CHROME to the browser binary if it is not in the default location.
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -28,7 +30,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 try {
   let target
-  for (let i = 0; i < 50 && !target; i++) {
+  // Chrome can take several seconds to open its debugging port while other browsers run, so wait up to 15s.
+  for (let i = 0; i < 150 && !target; i++) {
     target = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' }).then((r) => r.json()).catch(() => null)
     if (!target) await sleep(100)
   }
@@ -54,6 +57,13 @@ try {
   if (process.env.COLOR_SCHEME) features.push({ name: 'prefers-color-scheme', value: process.env.COLOR_SCHEME })
   await send('Emulation.setEmulatedMedia', { features })
   await send('Emulation.setDeviceMetricsOverride', { width, height: mobile ? 844 : 800, deviceScaleFactor: mobile ? 2 : 1, mobile })
+  if (process.env.LOCAL_STORAGE) {
+    // Seed the page's localStorage first, such as a signed-in session, so a screen behind sign-in renders.
+    await send('Page.navigate', { url: new URL(url).origin })
+    await sleep(500)
+    const entries = JSON.stringify(Object.entries(JSON.parse(process.env.LOCAL_STORAGE)))
+    await send('Runtime.evaluate', { expression: `for (const [k, v] of ${entries}) localStorage.setItem(k, v)` })
+  }
   await send('Page.navigate', { url })
   await sleep(2500)
   const { result } = await send('Runtime.evaluate', {

@@ -2,12 +2,18 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import certifi
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Local dev reads the repo-root .env; real environment variables (e.g. from compose) win.
 load_dotenv(BASE_DIR.parent / ".env")
+
+# Every HTTPS call verifies against certifi's CA bundle, because python.org builds of Python on macOS ship with none
+# and fail with CERTIFICATE_VERIFY_FAILED. OpenSSL reads SSL_CERT_FILE whenever Python builds a default context, so
+# plain urlopen() calls need no context of their own. A CA file set in the environment wins.
+os.environ.setdefault("SSL_CERT_FILE", certifi.where())
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-dev-only-not-for-production-use")
 
@@ -23,8 +29,10 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "config.apps.ProjectConfig",
     "apps.accounts",
     "apps.agents",
+    "apps.integrations",
     # new-backend-app: apps above
 ]
 
@@ -91,6 +99,17 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": False,
 }
+
+# Integrations. Google Calendar stays unconfigured until both client values are set.
+# The redirect URI must match one listed on the OAuth client in Google Cloud Console.
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_REDIRECT_URI = (
+    os.environ.get("GOOGLE_OAUTH_REDIRECT_URI")
+    or "http://localhost:5174/api/v1/integrations/google-calendar/callback/"
+)
+# Fernet key that encrypts stored OAuth tokens. Changing it makes every stored token unreadable.
+INTEGRATIONS_ENCRYPTION_KEY = os.environ.get("INTEGRATIONS_ENCRYPTION_KEY", "")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
