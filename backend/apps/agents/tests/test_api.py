@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
+from django.test import override_settings
 from engine.testing import reply
 from engine.types import AssistantMessage, ModelError, SystemMessage, TextDelta, UserMessage
 from rest_framework.test import APIClient
@@ -221,3 +222,20 @@ class ChatSessionApiTests(ChatTestCase):
             _, events, _ = self.send(session_id, "Hello")
         self.assertEqual(data(events, "error"), [{"detail": "This chat was deleted.", "status": 404}])
         self.assertFalse(ChatMessage.objects.filter(session_id=session_id).exists())
+
+
+@mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": "", "AGENTS_SCRIPTED_MODEL": "1"})
+class ScriptedModelTests(ChatTestCase):
+    """scripts/e2e-dashboard.sh runs the chat with a scripted model, which a production server must never use."""
+
+    def post(self):
+        return self.client.post(messages_url(self.create_session()), {"content": "Hello"}, format="json")
+
+    def test_a_server_without_debug_ignores_the_flag(self):
+        self.assertEqual(self.post().status_code, 503)
+
+    @override_settings(DEBUG=True)
+    def test_a_debug_server_with_the_flag_streams_the_scripted_reply(self):
+        events = read_events(self.post())
+        self.assertEqual(data(events, "assistant_message")[0]["model"], "e2e/scripted-model")
+        self.assertGreater(len(data(events, "delta")), 1)
