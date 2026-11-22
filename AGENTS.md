@@ -21,9 +21,9 @@ Nextsci Agents is an open-source platform for building, running, and inspecting 
 - `scripts/check-design.sh` — enforces the UI rules in `.agents/ui.md`; `scripts/check.sh` runs it
 - `scripts/check-react.sh` — enforces the React code layout in `.agents/react.md`; `scripts/check.sh` runs it
 - `dashboard/AGENTS.md`, `backend/AGENTS.md` — per-app pointers to the rules below, loaded by agents working inside each app
-- `scripts/screenshot.mjs` — full-page screenshot of a running app at an exact width, including widths under 500px
+- `scripts/screenshot.mjs` — full-page screenshot of a running app at an exact width, including widths under 500px (`LOCAL_STORAGE` seeds a signed-in session for screens behind sign-in)
 - `scripts/e2e/theme.mjs` — end-to-end test of the System, Light, and Dark theme switch against the running dashboard
-- `scripts/e2e-dashboard.sh` — end-to-end dashboard test in Chrome against a throwaway database: sign-in, URL routing (deep links, the sign-in redirect, back, reload, not-found), the sidebar, the theme switch, and sign-out with its confirmation dialog (`COLOR_SCHEME=light|dark` sets the screenshots' theme); drives `scripts/e2e/signin.mjs`
+- `scripts/e2e-dashboard.sh` — end-to-end dashboard test in Chrome against a throwaway database: sign-in, URL routing (deep links, the sign-in redirect, back, reload, not-found), the sidebar, the theme switch, and sign-out with its confirmation dialog (`COLOR_SCHEME=light|dark` sets the screenshots' theme; `E2E_API_PORT`, `E2E_DASH_PORT`, `E2E_CDP_PORT` move its ports); drives `scripts/e2e/signin.mjs`
 - `scripts/check-docs.sh` — fails when a doc in `.agents/` is not indexed or a relative markdown link breaks; `scripts/check.sh` runs it
 - `compose.yaml` — runs Postgres, backend, and dashboard together
 - `.env.example` — every config variable; copy to `.env` (gitignored)

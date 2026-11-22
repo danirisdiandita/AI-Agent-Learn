@@ -14,7 +14,8 @@ mkdir -p "$out"
 export POSTGRES_DB="nextsci_agents_e2e_$$"
 email="e2e-admin@example.com"
 password="e2e-$$-agent-test"
-api_port=8777 dash_port=5199 cdp_port=9333
+# Set E2E_API_PORT, E2E_DASH_PORT, or E2E_CDP_PORT when another run holds the default port.
+api_port=${E2E_API_PORT:-8777} dash_port=${E2E_DASH_PORT:-5199} cdp_port=${E2E_CDP_PORT:-9333}
 chrome="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 profile="$(mktemp -d)"
 pids=()
