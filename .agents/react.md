@@ -11,7 +11,7 @@ These rules apply to `dashboard/`, a Vite + React + TypeScript app. `scripts/che
 | `src/components/` | Components that more than one feature uses. shadcn/ui code is in `src/components/ui/`. | Yes |
 | `src/hooks/` | Hooks that more than one feature uses | Yes |
 | `src/lib/` | Plain helpers and `queryKeys.ts` | No |
-| `src/api/` | Server code that every feature shares, such as a request helper. The dashboard has none yet. | No |
+| `src/api/` | Server code that every feature shares: the stored session (`session.ts`) and `authedFetch` (`request.ts`), which sends the access token and refreshes it once on a 401. Call the API as the signed-in user through `authedFetch`. | No |
 
 An API module (`api.ts`, or files in `src/api/`) holds plain async functions. Each parses the response into a domain type and throws an `Error` whose message the user can read.
 
