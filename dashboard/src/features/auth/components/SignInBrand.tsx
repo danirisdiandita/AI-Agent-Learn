@@ -22,17 +22,20 @@ const values: { Icon: LucideIcon; title: string; body: string }[] = [
 
 const branchPath = (steps: Point[]) => [AGENT, ...steps, AGENT].map(([x, y]) => `${x},${y}`).join(' ')
 
-const gridLines = Array.from({ length: 16 }, (_, i) => 20 + i * 40)
+// The graph is scaled to fit inside the frame, so every route stays in view. The background and grid
+// reach far past the 620x400 view box to fill whatever space the frame has left around it.
+const BLEED = 1000
+const gridLines = Array.from({ length: 66 }, (_, i) => 20 - BLEED + i * 40)
 
 function RunGraph() {
   return (
-    <svg className="absolute inset-0 size-full" viewBox="0 0 620 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <rect width="620" height="400" style={{ fill: 'var(--surface-inset)' }} />
+    <svg className="absolute inset-0 size-full" viewBox="0 0 620 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <rect x={-BLEED} y={-BLEED} width={620 + 2 * BLEED} height={400 + 2 * BLEED} style={{ fill: 'var(--surface-inset)' }} />
       <g style={{ stroke: 'color-mix(in srgb, var(--text) 5.5%, transparent)' }} strokeWidth="1">
         {gridLines.map((n) => (
           <g key={n}>
-            <line x1={n} y1="0" x2={n} y2="400" />
-            {n < 400 && <line x1="0" y1={n} x2="620" y2={n} />}
+            <line x1={n} y1={-BLEED} x2={n} y2={400 + BLEED} />
+            <line x1={-BLEED} y1={n} x2={620 + BLEED} y2={n} />
           </g>
         ))}
       </g>
