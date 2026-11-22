@@ -56,7 +56,7 @@ These rules need judgment, so no script checks them:
 
 ## Domain map
 
-`accounts` and `integrations` exist today. The other apps are planned. Create each one with the generator when its first feature starts, not before. The list is in dependency order: each app may depend on the apps below it.
+`accounts`, `integrations`, and `agents` exist today. The other apps are planned. Create each one with the generator when its first feature starts, not before. The list is in dependency order: each app may depend on the apps below it.
 
 | Order | App | Owns |
 | --- | --- | --- |
