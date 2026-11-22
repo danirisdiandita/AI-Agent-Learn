@@ -119,7 +119,7 @@ class ChatSessionApiTests(TestCase):
             [(m["role"], m["content"]) for m in detail["messages"]],
             [("user", "First"), ("assistant", "Reply one"), ("user", "Second"), ("assistant", "Reply two")],
         )
-        self.assertEqual(set(detail["messages"][0]), {"id", "role", "content", "model", "created_at"})
+        self.assertEqual(set(detail["messages"][0]), {"id", "role", "content", "model", "created_at", "tool_calls"})
 
     def test_list_puts_the_latest_activity_first_with_a_title_from_the_first_message(self):
         older = self.create_session()

@@ -1,12 +1,20 @@
 from rest_framework import serializers
 
-from ..models import ChatMessage, ChatSession
+from ..models import ChatMessage, ChatSession, ChatToolCall
+
+
+class ChatToolCallSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatToolCall
+        fields = ["id", "name", "arguments", "status", "result", "created_at", "decided_at"]
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
+    tool_calls = ChatToolCallSerializer(many=True, read_only=True)
+
     class Meta:
         model = ChatMessage
-        fields = ["id", "role", "content", "model", "created_at"]
+        fields = ["id", "role", "content", "model", "created_at", "tool_calls"]
 
 
 class ChatSessionSerializer(serializers.ModelSerializer):

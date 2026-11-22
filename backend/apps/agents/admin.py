@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ChatMessage, ChatSession
+from .models import ChatMessage, ChatSession, ChatToolCall
 
 MESSAGE_FIELDS = ("role", "model", "content", "created_at")
 
@@ -46,6 +46,29 @@ class ChatMessageAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("session__user")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ChatToolCall)
+class ChatToolCallAdmin(admin.ModelAdmin):
+    """Shows each tool call a model asked for, with the user's decision and the result. Nothing here is editable."""
+
+    list_display = ("id", "name", "status", "message", "created_at", "decided_at")
+    list_filter = ("name", "status")
+    search_fields = ("message__session__user__email",)
+    fields = ("message", "call_id", "name", "arguments", "status", "result", "created_at", "decided_at")
+    readonly_fields = fields
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("message__session__user")
 
     def has_add_permission(self, request):
         return False

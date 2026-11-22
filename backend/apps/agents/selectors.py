@@ -23,5 +23,6 @@ def chat_sessions(*, user):
 
 
 def chat_session(*, user, session_id):
-    """One of the user's chat sessions with its title and its messages, or None when the user has no such session."""
-    return chat_sessions(user=user).prefetch_related("messages").filter(pk=session_id).first()
+    """One of the user's chat sessions with its title, its messages, and their tool calls, or None when the user has no
+    such session."""
+    return chat_sessions(user=user).prefetch_related("messages__tool_calls").filter(pk=session_id).first()
