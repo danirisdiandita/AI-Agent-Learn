@@ -2,12 +2,18 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import certifi
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Local dev reads the repo-root .env; real environment variables (e.g. from compose) win.
 load_dotenv(BASE_DIR.parent / ".env")
+
+# Every HTTPS call verifies against certifi's CA bundle, because python.org builds of Python on macOS ship with none
+# and fail with CERTIFICATE_VERIFY_FAILED. OpenSSL reads SSL_CERT_FILE whenever Python builds a default context, so
+# plain urlopen() calls need no context of their own. A CA file set in the environment wins.
+os.environ.setdefault("SSL_CERT_FILE", certifi.where())
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-dev-only-not-for-production-use")
 

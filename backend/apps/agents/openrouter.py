@@ -3,17 +3,12 @@
 import json
 import logging
 import os
-import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-import certifi
-
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "openrouter/auto"
-# python.org builds of Python on macOS ship without CA certificates, so verify against certifi's bundle.
-TLS = ssl.create_default_context(cafile=certifi.where())
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +43,7 @@ def complete(*, messages):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=60, context=TLS) as response:
+        with urllib.request.urlopen(request, timeout=60) as response:
             body = json.load(response)
     except urllib.error.HTTPError as error:
         logger.warning("OpenRouter answered HTTP %s: %s", error.code, error.read()[:500])

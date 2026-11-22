@@ -16,6 +16,12 @@ Each entry is a mistake that this project already made. It gives the symptom you
 - **Cause.** `backend/.venv` holds both runtime packages and the tools from `requirements-dev.txt`. `pip freeze` writes all of them.
 - **Do.** Add each new package to `requirements.txt` or `requirements-dev.txt` by hand, pinned with `==`.
 
+### HTTPS calls fail certificate checks on python.org Python
+
+- **Symptom.** The Agents chat says "Cannot reach OpenRouter.", or connecting Google Calendar ends with "The provider did not complete the connection." The backend log shows `CERTIFICATE_VERIFY_FAILED`.
+- **Cause.** python.org builds of Python on macOS ship with no CA certificates, so every `urlopen()` to an HTTPS server fails. The first fix passed a certifi context to the OpenRouter call only, and the Google token exchange hit the same failure later.
+- **Do.** Nothing per call. `config/settings/base.py` sets `SSL_CERT_FILE` to certifi's bundle for the whole process, so a plain `urlopen()` verifies correctly. Do not add `context=` to new calls. **Guard.** `config/tests/test_tls.py` fails when a default SSL context has no CA certificates.
+
 ### Backend checks need the database
 
 - **Symptom.** `scripts/check.sh` fails in the backend step with a Postgres authentication error, or prints a warning about migration history.
