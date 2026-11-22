@@ -30,7 +30,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 try {
   let target
-  for (let i = 0; i < 50 && !target; i++) {
+  // Chrome can take several seconds to open its debugging port while other browsers run, so wait up to 15s.
+  for (let i = 0; i < 150 && !target; i++) {
     target = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' }).then((r) => r.json()).catch(() => null)
     if (!target) await sleep(100)
   }
