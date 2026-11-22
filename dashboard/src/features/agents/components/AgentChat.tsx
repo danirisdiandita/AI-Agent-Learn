@@ -1,8 +1,46 @@
-import { ArrowUp, MessageSquare } from 'lucide-react'
+import { ArrowUp, Bot, CircleAlert, MessageSquare, SquarePen } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupText, InputGroupTextarea } from '@/components/ui/input-group'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
+import { Spinner } from '@/components/ui/spinner'
+import type { ChatMessage } from '@/features/agents/api'
 import { useAgentChat } from '@/features/agents/hooks/useAgentChat'
+
+const suggestions = ['What can an agent do?', 'Explain tool calls in two sentences', 'Write a system prompt for a support agent']
+
+function ModelAvatar() {
+  return (
+    <Avatar size="sm" className="mt-0.5">
+      <AvatarFallback className="bg-card">
+        <Bot aria-hidden="true" className="size-3.5" />
+      </AvatarFallback>
+    </Avatar>
+  )
+}
+
+function Message({ message }: { message: ChatMessage }) {
+  if (message.role === 'user') {
+    return (
+      <li className="max-w-[85%] self-end rounded-xl bg-muted px-3.5 py-2 whitespace-pre-wrap text-foreground">
+        <span className="sr-only">You: </span>
+        {message.content}
+      </li>
+    )
+  }
+  return (
+    <li className="flex gap-3">
+      <ModelAvatar />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-muted-foreground">Model</p>
+        <div className="mt-1 whitespace-pre-wrap text-[var(--text-2)]">{message.content}</div>
+      </div>
+    </li>
+  )
+}
 
 export function AgentChat() {
   const chat = useAgentChat()
@@ -13,78 +51,115 @@ export function AgentChat() {
     end.current?.scrollIntoView({ block: 'end' })
   }, [chat.messages.length, chat.pending, chat.error])
 
-  const submit = (event?: FormEvent) => {
-    event?.preventDefault()
-    const content = draft.trim()
-    if (!content || chat.pending) return
-    chat.send(content)
+  const send = (content: string) => {
+    if (!content.trim() || chat.pending) return
+    chat.send(content.trim())
     setDraft('')
+  }
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    send(draft)
   }
 
   // Enter sends, Shift+Enter starts a new line. Skip while an input method is composing a character.
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) submit(event)
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault()
+      send(draft)
+    }
   }
+
+  const started = chat.messages.length > 0
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto" aria-live="polite">
-        {chat.messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center p-6 pb-16 text-center">
-            <span className="flex size-10 items-center justify-center rounded-lg border bg-card shadow-[var(--highlight)]">
-              <MessageSquare aria-hidden="true" className="size-5 text-muted-foreground" />
-            </span>
-            <h2 className="mt-4 text-xl font-semibold tracking-[-0.012em]">Chat with a model</h2>
-            <p className="mt-2 max-w-[440px] text-balance text-muted-foreground">
-              Messages go to OpenRouter. Set OPENROUTER_API_KEY in .env and restart the backend to get replies.
-            </p>
-          </div>
-        ) : (
-          <ol className="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-4 sm:p-6">
+      <div className="flex-1 overflow-y-auto">
+        {started ? (
+          <ol aria-live="polite" className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-4 py-6 sm:px-6">
             {chat.messages.map((message, index) => (
-              <li
-                key={index}
-                className={
-                  message.role === 'user'
-                    ? 'max-w-[85%] self-end rounded-xl border bg-card px-3 py-2 whitespace-pre-wrap shadow-[var(--highlight)]'
-                    : 'max-w-full self-start whitespace-pre-wrap text-[var(--text-2)]'
-                }
-              >
-                <span className="sr-only">{message.role === 'user' ? 'You: ' : 'Model: '}</span>
-                {message.content}
-              </li>
+              <Message key={index} message={message} />
             ))}
-            {chat.pending && <li className="self-start text-sm text-muted-foreground">Waiting for the model…</li>}
+            {chat.pending && (
+              <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                <ModelAvatar />
+                <Spinner aria-hidden="true" />
+                Waiting for the model
+              </li>
+            )}
             {chat.error && (
-              <li
-                role="alert"
-                className="self-stretch rounded-xl border border-[color-mix(in_srgb,var(--danger)_40%,transparent)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-3 py-2 text-sm text-[var(--danger-text)]"
-              >
-                {chat.error}
+              <li>
+                <Alert variant="destructive">
+                  <CircleAlert aria-hidden="true" />
+                  <AlertTitle>The model did not reply</AlertTitle>
+                  <AlertDescription>{chat.error}</AlertDescription>
+                </Alert>
               </li>
             )}
           </ol>
+        ) : (
+          <Empty className="h-full pb-16">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <MessageSquare aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>Chat with a model</EmptyTitle>
+              <EmptyDescription>
+                Messages go to OpenRouter through the backend. Replies need{' '}
+                <code className="font-mono text-[13px] text-foreground">OPENROUTER_API_KEY</code> in{' '}
+                <code className="font-mono text-[13px] text-foreground">.env</code>.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent className="max-w-xl flex-row flex-wrap justify-center">
+              {suggestions.map((suggestion) => (
+                <Button key={suggestion} variant="secondary" size="sm" onClick={() => send(suggestion)}>
+                  {suggestion}
+                </Button>
+              ))}
+            </EmptyContent>
+          </Empty>
         )}
         <div ref={end} />
       </div>
-      <form onSubmit={submit} className="mx-auto flex w-full max-w-[720px] items-end gap-2 p-4 pt-2 sm:px-6">
-        <Textarea
-          aria-label="Message"
-          placeholder="Send a message"
-          rows={1}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
-          className="max-h-48 min-h-10"
-        />
-        {chat.messages.length > 0 && (
-          <Button type="button" variant="secondary" onClick={chat.clear} disabled={chat.pending}>
-            Clear
-          </Button>
-        )}
-        <Button type="submit" size="icon-lg" aria-label="Send" disabled={!draft.trim() || chat.pending}>
-          <ArrowUp aria-hidden="true" />
-        </Button>
+      <form onSubmit={submit} className="mx-auto w-full max-w-[720px] px-4 pb-4 sm:px-6">
+        <InputGroup className="rounded-xl shadow-[var(--highlight)]">
+          <InputGroupTextarea
+            aria-label="Message"
+            placeholder="Send a message"
+            rows={1}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onKeyDown}
+            className="max-h-48 min-h-12 px-3.5 pt-3"
+          />
+          <InputGroupAddon align="block-end" className="gap-1 px-2">
+            {started && (
+              <InputGroupButton onClick={chat.clear} disabled={chat.pending} className="text-muted-foreground">
+                <SquarePen aria-hidden="true" />
+                New chat
+              </InputGroupButton>
+            )}
+            <InputGroupText className="ml-auto hidden gap-1 text-xs sm:flex">
+              <Kbd>Enter</Kbd> to send
+              <span aria-hidden="true" className="px-1">·</span>
+              <KbdGroup>
+                <Kbd>Shift</Kbd>
+                <Kbd>Enter</Kbd>
+              </KbdGroup>{' '}
+              new line
+            </InputGroupText>
+            <InputGroupButton
+              type="submit"
+              variant="default"
+              size="icon-sm"
+              aria-label="Send"
+              disabled={!draft.trim() || chat.pending}
+              className="ml-auto rounded-full sm:ml-2"
+            >
+              <ArrowUp aria-hidden="true" />
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
       </form>
     </div>
   )
