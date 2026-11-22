@@ -72,8 +72,8 @@ A name that is not snake_case fails with `config.E001`.
 | Order | App | Owns |
 | --- | --- | --- |
 | 8 | `evals` | Eval datasets and cases, eval runs, graders, and scores |
-| 7 | `runs` | Runs of an agent: conversations, messages, each step and tool call in order, token use, cost, and errors |
-| 6 | `agents` | Agent definitions: model, instructions, sampling settings, the tools and knowledge each agent may use, and their versions |
+| 7 | `runs` | Runs of an agent: each step and tool call in order, token use, cost, and errors |
+| 6 | `agents` | Agent definitions: model, instructions, sampling settings, the tools and knowledge each agent may use, and their versions. Chat sessions and their messages |
 | 5 | `knowledge` | Knowledge bases, uploaded documents, chunks, embeddings, and retrieval settings |
 | 4 | `tools` | Tool definitions with their JSON schemas, HTTP tools, and connected MCP servers |
 | 3 | `integrations` | Connected third-party accounts (OAuth tokens) such as Google Calendar |
