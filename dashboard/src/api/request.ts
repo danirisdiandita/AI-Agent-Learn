@@ -1,6 +1,16 @@
 import { loadSession, saveSession, type Session } from '@/api/session'
 import { isRecord } from '@/lib/isRecord'
 
+/**
+ * Thrown by an API module when the server answers 401 even after authedFetch refreshed the token, so the refresh token
+ * expired too. The query client in main.tsx catches it and sends the user to sign-in.
+ */
+export class SessionExpired extends Error {
+  constructor() {
+    super('Your session expired. Sign in again.')
+  }
+}
+
 async function refreshSession(session: Session): Promise<Session | null> {
   const res = await fetch('/api/v1/auth/token/refresh/', {
     method: 'POST',

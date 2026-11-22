@@ -2,4 +2,6 @@
 export const queryKeys = {
   session: ['session'] as const,
   integrations: ['integrations'] as const,
+  chatSessions: ['chat-sessions'] as const,
+  chatSession: (id: number) => ['chat-sessions', id] as const,
 }

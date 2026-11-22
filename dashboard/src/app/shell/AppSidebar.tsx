@@ -61,9 +61,15 @@ export function AppSidebar({ user, active }: Props) {
                 <SidebarMenuButton
                   isActive={section === active}
                   tooltip={section.label}
-                  // The link sets aria-current itself. Exact matching keeps it on the same item as isActive,
-                  // so a not-found path under /agents marks nothing current.
-                  render={<Link to={section.path} activeOptions={{ exact: true, includeSearch: false }} />}
+                  // The link would mark itself current by its path alone. The matched route decides instead, as for
+                  // isActive, so /agents/<id> marks Agents current and a not-found path under /agents marks nothing.
+                  render={
+                    <Link
+                      to={section.path}
+                      activeOptions={{ exact: true, includeSearch: false }}
+                      aria-current={section === active ? 'page' : undefined}
+                    />
+                  }
                   onClick={() => setOpenMobile(false)}
                 >
                   <section.icon

@@ -3,15 +3,6 @@ from rest_framework import serializers
 from ..models import ChatMessage, ChatSession
 
 
-class StatelessChatMessageSerializer(serializers.Serializer):
-    role = serializers.ChoiceField(choices=["user", "assistant"])
-    content = serializers.CharField(trim_whitespace=False)
-
-
-class ChatRequestSerializer(serializers.Serializer):
-    messages = StatelessChatMessageSerializer(many=True, allow_empty=False)
-
-
 class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage

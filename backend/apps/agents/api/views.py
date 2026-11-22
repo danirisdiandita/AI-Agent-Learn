@@ -5,24 +5,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 
 from .. import openrouter, selectors, services
-from .serializers import (
-    ChatMessageSerializer,
-    ChatRequestSerializer,
-    ChatSessionDetailSerializer,
-    ChatSessionSerializer,
-    SendMessageSerializer,
-)
-
-
-@api_view(["POST"])
-def chat(request):
-    serializer = ChatRequestSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    try:
-        reply = openrouter.complete(messages=serializer.validated_data["messages"])
-    except openrouter.ChatError as error:
-        return Response({"detail": str(error)}, status=error.status)
-    return Response({"message": {"role": "assistant", "content": reply.content}})
+from .serializers import ChatMessageSerializer, ChatSessionDetailSerializer, ChatSessionSerializer, SendMessageSerializer
 
 
 def owned_session(request, session_id):

@@ -41,7 +41,7 @@ The dashboard uses [TanStack Router](https://tanstack.com/router) with a route t
 To add a screen to the shell:
 
 1. Create its feature folder, as [Add a feature](#add-a-feature) describes.
-2. Add a route under `signedInRoute` in `router.tsx` with the screen as its `component`. If the section is already listed as planned, replace its `plannedSection('/<path>')` line and delete the entry's `empty` text. If the screen reads search params, give the route a `validateSearch` that returns every key, as `/integrations` does.
+2. Add a route under `signedInRoute` in `router.tsx` with the screen as its `component`. If the section is already listed as planned, replace its `plannedSection('/<path>')` line and delete the entry's `empty` text. If the screen reads search params, give the route a `validateSearch` that returns every key, as `/integrations` does. If its path has a param, give the route a `params.parse` that returns `false` for a value that is not valid, as `/agents/$sessionId` does, so the path falls through to the not-found page.
 3. Add an entry to `sections` in `sections.ts` if the screen belongs in the sidebar.
 4. Link to it with `<Link to="/<path>">` from `@tanstack/react-router`. The link type checks the path against the route tree.
 

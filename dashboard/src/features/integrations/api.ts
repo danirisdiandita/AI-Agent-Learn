@@ -1,4 +1,4 @@
-import { authedFetch } from '@/api/request'
+import { authedFetch, SessionExpired } from '@/api/request'
 import { isRecord } from '@/lib/isRecord'
 
 /** Where an integration stands for the signed-in user. A connection shows even if the server lost its client. */
@@ -34,7 +34,7 @@ function parseIntegration(value: unknown): Integration {
 async function send(path: string, init: RequestInit, action: string): Promise<Response> {
   const res = await authedFetch(`${API}${path}`, init)
   if (!res) throw new Error('Cannot reach the server. Check that the API server is running.')
-  if (res.status === 401) throw new Error('Your session expired. Sign in again.')
+  if (res.status === 401) throw new SessionExpired()
   if (res.ok) return res
   const body: unknown = await res.json().catch(() => null)
   const detail = isRecord(body) && typeof body.detail === 'string' ? ` ${body.detail}` : ''

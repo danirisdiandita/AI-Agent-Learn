@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# End-to-end test of dashboard sign-in against the real Django backend, in Chrome.
+# End-to-end test of the dashboard against the real Django backend, in Chrome.
 #   scripts/e2e-dashboard.sh [screenshot-dir]
 # Set COLOR_SCHEME=light or COLOR_SCHEME=dark to take the screenshots in that theme.
-# Creates a throwaway database and user, starts Django and the dashboard on spare ports,
-# runs scripts/e2e/signin.mjs, and removes everything it created, even when a step fails.
+# Creates a throwaway database and user with two saved chats (scripts/e2e/seed-chats.py), starts Django and the
+# dashboard on spare ports, runs scripts/e2e/signin.mjs, and removes everything it created, even when a step fails.
+# The backend runs with no OpenRouter key, so the test never calls a model: sending a message checks the error path.
 # Needs: PostgreSQL reachable with the credentials in .env, backend/.venv, dashboard/node_modules, Chrome.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -12,6 +13,8 @@ mkdir -p "$out"
 
 [[ -f "$root/.env" ]] && { set -a; . "$root/.env"; set +a; }
 export POSTGRES_DB="nextsci_agents_e2e_$$"
+# Set, even when empty, so Django does not read the key from .env.
+export OPENROUTER_API_KEY=""
 email="e2e-admin@example.com"
 password="e2e-$$-agent-test"
 # Set E2E_API_PORT, E2E_DASH_PORT, or E2E_CDP_PORT when another run holds the default port.
@@ -42,6 +45,7 @@ PGPASSWORD="${POSTGRES_PASSWORD:-}" createdb -h "${POSTGRES_HOST:-localhost}" -p
 cd "$root/backend"
 .venv/bin/python manage.py migrate -v0
 .venv/bin/python manage.py shell -v0 -c "from django.contrib.auth import get_user_model as g; g().objects.create_user(email='$email', password='$password')"
+E2E_EMAIL="$email" .venv/bin/python manage.py shell -v0 <"$root/scripts/e2e/seed-chats.py"
 .venv/bin/python manage.py runserver "$api_port" >"$out/backend.log" 2>&1 &
 pids+=($!)
 

@@ -6,7 +6,9 @@ import { NotFound } from '@/app/shell/NotFound'
 import type { PlannedSection as Planned } from '@/app/shell/sections'
 import { restoreSession } from '@/features/auth/api'
 import { SignInPage } from '@/features/auth/components/SignInPage'
-import { AgentChat } from '@/features/agents/components/AgentChat'
+import { AgentsPage } from '@/features/agents/components/AgentsPage'
+import { NewChat } from '@/features/agents/components/NewChat'
+import { SessionChat } from '@/features/agents/components/SessionChat'
 import { IntegrationsPage } from '@/features/integrations/components/IntegrationsPage'
 import { queryKeys } from '@/lib/queryKeys'
 
@@ -54,6 +56,23 @@ const signedInRoute = createRoute({
   component: AppShell,
 })
 
+// /agents lists the chats beside a new chat, and /agents/<id> beside a saved one. Only a positive integer matches $sessionId,
+// so a path such as /agents/no-such-chat falls through to the not-found page.
+const agentsRoute = createRoute({ getParentRoute: () => signedInRoute, path: '/agents', component: AgentsPage })
+const agentsRoutes = agentsRoute.addChildren([
+  createRoute({ getParentRoute: () => agentsRoute, path: '/', component: NewChat }),
+  createRoute({
+    getParentRoute: () => agentsRoute,
+    path: '$sessionId',
+    params: {
+      parse: ({ sessionId }) =>
+        /^[1-9]\d*$/.test(sessionId) && Number.isSafeInteger(Number(sessionId)) ? { sessionId: Number(sessionId) } : false,
+      stringify: ({ sessionId }) => ({ sessionId: String(sessionId) }),
+    },
+    component: SessionChat,
+  }),
+])
+
 // A section whose feature is not built yet. Its route shows the section's empty state.
 const plannedSection = <TPath extends Planned['path']>(path: TPath) =>
   createRoute({ getParentRoute: () => signedInRoute, path, component: PlannedSection })
@@ -62,7 +81,7 @@ const routeTree = rootRoute.addChildren([
   signInRoute,
   indexRoute,
   signedInRoute.addChildren([
-    createRoute({ getParentRoute: () => signedInRoute, path: '/agents', component: AgentChat }),
+    agentsRoutes,
     plannedSection('/runs'),
     plannedSection('/tools'),
     plannedSection('/knowledge'),
