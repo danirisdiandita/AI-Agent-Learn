@@ -1,6 +1,17 @@
+import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ChevronsUpDown, LogOut } from 'lucide-react'
 import { sections, type Section } from '@/app/shell/sections'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,6 +87,7 @@ export function AppSidebar({ user, active }: Props) {
 
 function UserMenu({ user }: { user: User }) {
   const signOut = useSignOut()
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const { isMobile, state } = useSidebar()
   const collapsed = state === 'collapsed' && !isMobile
   return (
@@ -103,12 +115,24 @@ function UserMenu({ user }: { user: User }) {
               <p className="truncate px-1.5 pb-1.5 text-sm text-foreground">{user.email}</p>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={signOut}>
+            <DropdownMenuItem onClick={() => setConfirmOpen(true)}>
               <LogOut aria-hidden="true" />
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sign out?</AlertDialogTitle>
+              <AlertDialogDescription>You will need your email and password to sign back in.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={signOut}>Sign out</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SidebarMenuItem>
     </SidebarMenu>
   )

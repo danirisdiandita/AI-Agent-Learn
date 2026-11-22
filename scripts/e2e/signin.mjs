@@ -171,8 +171,23 @@ await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, dev
 await sleep(500)
 await clickAt('document.querySelector("[data-slot=sidebar-footer] [data-sidebar=menu-button]")'); await sleep(400)
 await shot('dash-user-menu')
-await clickAt(`[...document.querySelectorAll('[role=menuitem]')].find((i) => i.textContent.trim() === 'Sign out')`); await atUrl('/sign-in')
-check('sign out from the footer menu returns to sign-in and clears storage', (await url()) === '/sign-in' && (await text()).startsWith('Sign in to Nextsci') && (await js('localStorage.getItem("nextsci-agents.session")')) === null, await url())
+const openUserMenu = async () => { await clickAt('document.querySelector("[data-slot=sidebar-footer] [data-sidebar=menu-button]")'); await sleep(400) }
+const signOutItem = `[...document.querySelectorAll('[role=menuitem]')].find((i) => i.textContent.trim() === 'Sign out')`
+const confirmDialog = () => js('document.querySelector("[role=alertdialog]")?.textContent')
+const dialogButton = (label) => `[...document.querySelectorAll('[role=alertdialog] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
+const signedIn = async () => (await url()) === '/runs' && (await js('localStorage.getItem("nextsci-agents.session")')) !== null
+await clickAt(signOutItem); await sleep(400)
+check('sign out asks for confirmation first', (await confirmDialog())?.startsWith('Sign out?') && (await signedIn()), await confirmDialog())
+await shot('dash-signout-confirm')
+await clickAt(dialogButton('Cancel')); await sleep(400)
+check('cancel closes the dialog and keeps the session', !(await confirmDialog()) && (await signedIn()), await url())
+await openUserMenu(); await clickAt(signOutItem); await sleep(400)
+for (const type of ['keyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+await sleep(400)
+check('escape closes the dialog and keeps the session', !(await confirmDialog()) && (await signedIn()), await url())
+await openUserMenu(); await clickAt(signOutItem); await sleep(400)
+await clickAt(dialogButton('Sign out')); await atUrl('/sign-in')
+check('confirming sign out returns to sign-in and clears storage', (await url()) === '/sign-in' && (await text()).startsWith('Sign in to Nextsci') && (await js('localStorage.getItem("nextsci-agents.session")')) === null, await url())
 await go(`${base}agents`)
 check('after sign out, /agents goes to sign-in', (await url()) === '/sign-in?redirect=%2Fagents', await url())
 await go(`${base}no-such-page`)
