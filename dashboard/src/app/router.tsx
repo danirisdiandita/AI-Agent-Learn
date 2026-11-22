@@ -3,10 +3,11 @@ import { createRootRouteWithContext, createRoute, createRouter, redirect } from 
 import { AppShell } from '@/app/shell/AppShell'
 import { PlannedSection } from '@/app/shell/EmptyState'
 import { NotFound } from '@/app/shell/NotFound'
-import type { Section } from '@/app/shell/sections'
+import type { PlannedSection as Planned } from '@/app/shell/sections'
 import { restoreSession } from '@/features/auth/api'
 import { SignInPage } from '@/features/auth/components/SignInPage'
 import { AgentChat } from '@/features/agents/components/AgentChat'
+import { IntegrationsPage } from '@/features/integrations/components/IntegrationsPage'
 import { queryKeys } from '@/lib/queryKeys'
 
 // The session query is the only record of who is signed in. Sign-in and sign-out write it in the cache.
@@ -54,7 +55,7 @@ const signedInRoute = createRoute({
 })
 
 // A section whose feature is not built yet. Its route shows the section's empty state.
-const plannedSection = <TPath extends Section['path']>(path: TPath) =>
+const plannedSection = <TPath extends Planned['path']>(path: TPath) =>
   createRoute({ getParentRoute: () => signedInRoute, path, component: PlannedSection })
 
 const routeTree = rootRoute.addChildren([
@@ -65,6 +66,17 @@ const routeTree = rootRoute.addChildren([
     plannedSection('/runs'),
     plannedSection('/tools'),
     plannedSection('/knowledge'),
+    createRoute({
+      getParentRoute: () => signedInRoute,
+      path: '/integrations',
+      // The connect callback lands here with ?connected=<id> or ?error=<code>. Return every key: one left out
+      // keeps its raw value.
+      validateSearch: (search): { connected?: string; error?: string } => ({
+        connected: typeof search.connected === 'string' ? search.connected : undefined,
+        error: typeof search.error === 'string' ? search.error : undefined,
+      }),
+      component: IntegrationsPage,
+    }),
     // Any other path, so a signed-in user sees the not-found page inside the shell.
     createRoute({ getParentRoute: () => signedInRoute, path: '$', component: NotFound }),
   ]),

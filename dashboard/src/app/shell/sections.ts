@@ -1,15 +1,15 @@
-import { Activity, BookOpen, Bot, Wrench, type LucideIcon } from 'lucide-react'
+import { Activity, BookOpen, Bot, Plug, Wrench, type LucideIcon } from 'lucide-react'
 
 // The sidebar lists these in order. Each path needs a route in src/app/router.tsx: the sidebar links to it,
-// so a path without a route fails the typecheck.
-type SectionShape = { path: `/${string}`; label: string; icon: LucideIcon; empty: { title: string; body: string } }
+// so a path without a route fails the typecheck. A section whose feature is not built yet has the text of its
+// empty state in `empty`. A built section drops it.
+type SectionShape = { path: `/${string}`; label: string; icon: LucideIcon; empty?: { title: string; body: string } }
 
 export const sections = [
   {
     path: '/agents',
     label: 'Agents',
     icon: Bot,
-    empty: { title: 'No agents yet', body: 'Defining agents with a model, instructions, and tools arrives with the next releases.' },
   },
   {
     path: '/runs',
@@ -29,9 +29,17 @@ export const sections = [
     icon: BookOpen,
     empty: { title: 'No knowledge yet', body: 'Uploading documents that agents can search arrives with the next releases.' },
   },
+  {
+    path: '/integrations',
+    label: 'Integrations',
+    icon: Plug,
+  },
 ] as const satisfies readonly SectionShape[]
 
 export type Section = (typeof sections)[number]
+
+/** A section whose screen is still its empty state. */
+export type PlannedSection = Extract<Section, { empty: object }>
 
 /** The section of the current screen: the one whose route matched. Undefined on the not-found page. */
 export const matchedSection = (matches: readonly { fullPath: string }[]) =>

@@ -34,7 +34,7 @@ INTEGRATIONS = {
         Integration(
             id="google-calendar",
             name="Google Calendar",
-            description="Let agents read your calendars and create, update, and delete events.",
+            description="Read and manage the calendars and events of a Google account.",
             provider=Connection.Provider.GOOGLE_CALENDAR,
             scopes=("openid", "email", "https://www.googleapis.com/auth/calendar"),
         ),

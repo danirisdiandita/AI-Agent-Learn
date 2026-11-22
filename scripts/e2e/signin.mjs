@@ -135,6 +135,18 @@ await pressCtrlB()
 const afterTwo = (await sidebar())?.state
 check('Ctrl+B toggles the sidebar', afterOne === 'expanded' && afterTwo === 'collapsed', `${afterOne}, ${afterTwo}`)
 
+await clickAt(navButton('Integrations')); await atUrl('/integrations')
+await until(`document.querySelector('main li h2')?.textContent === 'Google Calendar'`)
+check('clicking Integrations lists Google Calendar', (await heading()) === 'Integrations' && (await js(`document.querySelector('main li h2')?.textContent`)) === 'Google Calendar', `${await heading()} ${await text()}`)
+await shot('dash-integrations')
+// Google sends the browser to the callback through the dashboard's /api proxy. A forged state connects nothing.
+await go(`${base}api/v1/integrations/google-calendar/callback/?state=forged&code=x`)
+await atUrl('/integrations?error=expired'); await until('document.querySelector("main [role=alert]")')
+const notice = await js('document.querySelector("main [role=alert]")?.textContent')
+check('a failed connection returns to Integrations and says why', (await url()) === '/integrations?error=expired' && notice?.includes('expired'), `${await url()} ${notice}`)
+await clickAt(`document.querySelector('main [aria-label=Dismiss]')`); await atUrl('/integrations')
+check('dismissing the notice clears it from the address', (await url()) === '/integrations' && !(await js('!!document.querySelector("main [role=alert]")')), await url())
+
 await js(`(() => { const s = JSON.parse(localStorage.getItem('nextsci-agents.session')); s.access = 'expired'; localStorage.setItem('nextsci-agents.session', JSON.stringify(s)); return true })()`)
 await go(base)
 t = await text()

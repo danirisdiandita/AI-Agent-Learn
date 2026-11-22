@@ -35,13 +35,13 @@ The dashboard uses [TanStack Router](https://tanstack.com/router) with a route t
 
 - **The route tree.** `src/app/router.tsx` defines every route: `/sign-in`, the screens inside the shell, and `/`, which redirects to `/agents`. A pathless route with the id `signed-in` renders the shell (`src/app/shell/AppShell.tsx`), and each screen renders in the shell's `<Outlet />`. A catch-all `$` route in the shell shows the not-found page.
 - **The guards.** Route guards live in `router.tsx`, in each route's `beforeLoad`, and nowhere else. They read the session query from the `queryClient` in router context. A signed-out visit to a shell route goes to `/sign-in?redirect=<path>`. A signed-in visit to `/sign-in` goes to the path in `redirect`, or to `/agents` when there is none. The sign-in route's `validateSearch` drops any `redirect` that would leave this origin. Components never check the session to decide what to render.
-- **The sidebar.** `src/app/shell/sections.ts` lists the sidebar sections in order. Each entry has a `path`, a label, an icon, and the empty-state text. The sidebar links to each `path`, so an entry without a route fails the typecheck. The active item, the header title, and the document title come from the matched route.
+- **The sidebar.** `src/app/shell/sections.ts` lists the sidebar sections in order. Each entry has a `path`, a label, an icon, and, while its feature is planned, the empty-state text in `empty`. The sidebar links to each `path`, so an entry without a route fails the typecheck. `plannedSection()` accepts only paths whose entry has `empty`. The active item, the header title, and the document title come from the matched route.
 - **After sign-in or sign-out.** `useSignIn` writes the session into the cache and calls `router.invalidate()`, which reruns the guards. `useSignOut` clears the session and navigates to `/sign-in`.
 
 To add a screen to the shell:
 
 1. Create its feature folder, as [Add a feature](#add-a-feature) describes.
-2. Add a route under `signedInRoute` in `router.tsx` with the screen as its `component`. If the section is already listed as planned, replace its `plannedSection('/<path>')` line.
+2. Add a route under `signedInRoute` in `router.tsx` with the screen as its `component`. If the section is already listed as planned, replace its `plannedSection('/<path>')` line and delete the entry's `empty` text. If the screen reads search params, give the route a `validateSearch` that returns every key, as `/integrations` does.
 3. Add an entry to `sections` in `sections.ts` if the screen belongs in the sidebar.
 4. Link to it with `<Link to="/<path>">` from `@tanstack/react-router`. The link type checks the path against the route tree.
 

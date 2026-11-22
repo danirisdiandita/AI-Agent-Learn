@@ -18,7 +18,8 @@ export function EmptyState({ icon: Icon, title, children }: { icon: LucideIcon; 
 export function PlannedSection() {
   const section = useMatches({ select: matchedSection })
   return (
-    section && (
+    section &&
+    'empty' in section && (
       <EmptyState icon={section.icon} title={section.empty.title}>
         <p className="mt-2 max-w-[440px] text-balance text-muted-foreground">{section.empty.body}</p>
       </EmptyState>
