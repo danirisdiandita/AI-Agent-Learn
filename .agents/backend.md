@@ -8,6 +8,7 @@ The Django backend is split into one app per business domain under `backend/apps
 backend/
 ├── config/                 Project wiring only: settings, root URLs, ASGI and WSGI
 │   ├── settings/           base.py (shared), dev.py (default), prod.py
+│   ├── checks.py           System checks over every model in apps/, loaded by apps.py
 │   └── urls.py             Mounts each app's api/urls.py under /api/v1/<app>/
 ├── apps/
 │   └── <domain>/           One Django app per business domain
@@ -53,6 +54,16 @@ These rules need judgment, so no script checks them:
 - **Validate at the boundary.** Serializers validate request data. Services trust their arguments and enforce business rules, not types.
 - **Test through the public surface.** Test endpoints in `tests/test_api.py` with the DRF `APIClient`. Test business rules by calling services directly.
 - **Create a shared app only when two apps need the same code.** Do not create `common/` or `utils/` in advance.
+
+## Names in the database
+
+Every table, column, index, and constraint of a model in `apps/` has a snake_case name: lowercase words joined by underscores, such as `agents_chat_session` or `created_at`. `config/checks.py` enforces this as a Django system check, so `manage.py check`, `manage.py test`, and `scripts/check.sh` fail on a bad name.
+
+- **Set `db_table` when the class name has more than one word.** Django's default table name runs the words together, such as `agents_chatsession` for `ChatSession`. Write `db_table = "agents_chat_session"` in the model's `Meta`. The check fails with `config.E002` until you do, and its hint names the table to use.
+- **Keep field names snake_case.** A column takes its name from the field, and a foreign key adds `_id`, such as `user_id`. Do not set `db_column` to anything else.
+- **Name each index and constraint after its table.** Use `<table>_<what>`, such as `agents_chat_message_role_valid`. Django limits index names to 30 characters, so shorten the table part of an index name, such as `agents_chat_msg_session_idx`.
+
+A name that is not snake_case fails with `config.E001`.
 
 ## Domain map
 
