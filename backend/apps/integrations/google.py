@@ -1,9 +1,9 @@
-"""Google's OAuth 2.0 endpoints for web server apps, over the standard library. No Django here."""
+"""Google's OAuth 2.0 endpoints and the Calendar API, over the standard library. No Django here."""
 
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -12,11 +12,16 @@ import jwt
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 TIMEOUT_SECONDS = 10
 
 
 class GoogleError(Exception):
-    """Google refused the request or sent a response this client cannot read."""
+    """Google refused the request or sent a response this client cannot read. `status` is Google's HTTP status."""
+
+    def __init__(self, message: str, *, status: int | None = None):
+        super().__init__(message)
+        self.status = status
 
 
 @dataclass(frozen=True)
@@ -27,6 +32,12 @@ class Tokens:
     expires_at: datetime
     scopes: str
     email: str
+
+
+@dataclass(frozen=True)
+class AccessToken:
+    token: str
+    expires_at: datetime
 
 
 @dataclass(frozen=True)
@@ -77,9 +88,40 @@ class Client:
             raise GoogleError(f"Unexpected token response: {error!r}") from error
 
 
+    def refresh(self, *, refresh_token: str) -> AccessToken:
+        """A new access token for a stored refresh token. Google answers 400 when the user revoked the grant."""
+        body = _post(
+            TOKEN_URL,
+            {
+                "refresh_token": refresh_token,
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "grant_type": "refresh_token",
+            },
+        )
+        try:
+            return AccessToken(
+                token=body["access_token"],
+                expires_at=datetime.now(UTC) + timedelta(seconds=int(body["expires_in"])),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise GoogleError(f"Unexpected token response: {error!r}") from error
+
+
 def revoke(token: str) -> None:
     """Revokes a token and every grant made with it. Raises GoogleError when Google does not confirm."""
     _post(REVOKE_URL, {"token": token})
+
+
+def create_event(*, access_token: str, event: dict) -> dict:
+    """Inserts an event, in the Calendar API's Event format, into the user's primary calendar. Returns the event."""
+    request = Request(
+        EVENTS_URL,
+        data=json.dumps(event).encode(),
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    return _send(request)
 
 
 def _post(url: str, form: dict[str, str]) -> dict:
@@ -89,11 +131,17 @@ def _post(url: str, form: dict[str, str]) -> dict:
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         method="POST",
     )
+    return _send(request)
+
+
+def _send(request: Request) -> dict:
+    url = request.full_url
     try:
         with urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             raw = response.read()
+    except HTTPError as error:
+        raise GoogleError(f"{url} failed: {error}: {error.read()[:500]!r}", status=error.code) from error
     except (URLError, TimeoutError) as error:
-        # HTTPError is a URLError, so a 4xx or 5xx from Google lands here too.
         raise GoogleError(f"{url} failed: {error}") from error
     try:
         return json.loads(raw) if raw else {}

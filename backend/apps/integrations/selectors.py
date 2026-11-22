@@ -28,3 +28,7 @@ def integration_statuses(*, user) -> list[IntegrationStatus]:
         )
         for integration in INTEGRATIONS.values()
     ]
+
+
+def has_connection(*, user, provider: Connection.Provider) -> bool:
+    return Connection.objects.filter(user=user, provider=provider).exists()

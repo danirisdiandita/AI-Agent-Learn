@@ -1,11 +1,7 @@
-import io
-import json
 import time
 from unittest import mock
-from urllib.error import HTTPError
-from urllib.parse import parse_qs, parse_qsl, urlsplit
+from urllib.parse import parse_qs, urlsplit
 
-import jwt
 from cryptography.fernet import Fernet
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection as db
@@ -15,45 +11,13 @@ from rest_framework.test import APIClient
 from apps.accounts.models import User
 
 from ..models import Connection
+from .fake_google import REVOKE_URL, TOKEN_URL, FakeGoogle, token_response
 
 LIST_URL = "/api/v1/integrations/"
 CONNECT_URL = "/api/v1/integrations/google-calendar/connect/"
 CALLBACK_URL = "/api/v1/integrations/google-calendar/callback/"
 DISCONNECT_URL = "/api/v1/integrations/google-calendar/"
-TOKEN_URL = "https://oauth2.googleapis.com/token"
-REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 REDIRECT_URI = "http://localhost:5174/api/v1/integrations/google-calendar/callback/"
-
-
-def token_response(*, access="access-1", refresh="refresh-1", email="ada@gmail.com"):
-    body = {
-        "access_token": access,
-        "expires_in": 3599,
-        "scope": "openid email https://www.googleapis.com/auth/calendar",
-        "token_type": "Bearer",
-        "id_token": jwt.encode({"email": email, "sub": "123"}, "any-key-the-client-never-checks-it", algorithm="HS256"),
-    }
-    if refresh:
-        body["refresh_token"] = refresh
-    return body
-
-
-class FakeGoogle:
-    """Answers in place of Google's OAuth endpoints and records every request, so no test reaches the network."""
-
-    def __init__(self):
-        self.requests = []
-        self.responses = {TOKEN_URL: token_response(), REVOKE_URL: {}}
-        self.failing = set()
-
-    def urlopen(self, request, timeout):
-        self.requests.append((request.full_url, dict(parse_qsl(request.data.decode()))))
-        if request.full_url in self.failing:
-            raise HTTPError(request.full_url, 400, "Bad Request", {}, io.BytesIO(b'{"error": "invalid_grant"}'))
-        return io.BytesIO(json.dumps(self.responses[request.full_url]).encode())
-
-    def sent_to(self, url):
-        return [form for sent_url, form in self.requests if sent_url == url]
 
 
 @override_settings(
@@ -166,7 +130,7 @@ class IntegrationsApiTests(TestCase):
         self.assertFalse(Connection.objects.exists())
 
     def test_callback_when_google_rejects_the_code(self):
-        self.google.failing.add(TOKEN_URL)
+        self.google.failing[TOKEN_URL] = 400
         response = self.finish(state=self.start()["state"], code="code-1")
         self.assertEqual(response["Location"], "/integrations?error=failed")
         self.assertFalse(Connection.objects.exists())
@@ -197,7 +161,7 @@ class IntegrationsApiTests(TestCase):
 
     def test_disconnect_forgets_the_tokens_when_google_refuses_the_revoke(self):
         self.connect()
-        self.google.failing.add(REVOKE_URL)
+        self.google.failing[REVOKE_URL] = 400
         self.assertEqual(self.client.delete(DISCONNECT_URL).status_code, 204)
         self.assertFalse(Connection.objects.exists())
 
