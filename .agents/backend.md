@@ -24,6 +24,7 @@ backend/
 │       ├── <module>.py     Optional plain modules, such as a client for an outside API (integrations/google.py)
 │       ├── migrations/
 │       └── tests/          test_api.py, test_services.py, test_selectors.py
+├── engine/                 The agent loop in plain Python, with no Django (see The agent runtime)
 ├── app_template/           Template that scripts/new-backend-app.sh renders
 ├── .importlinter           Import contracts
 ├── requirements.txt        Runtime dependencies (Docker installs only these)
@@ -84,6 +85,12 @@ The `domain-order` contract in `backend/.importlinter` lists the same order. If 
 
 ## The agent runtime
 
-Keep the agent loop in a plain Python package, `backend/engine/`, that never imports Django. It takes an agent definition, the conversation so far, a model client, and the tools as plain Python types. It calls the model, runs the tool calls the model asks for, and yields each step until the model gives a final answer or a step limit stops it. The `runs` app turns models into the engine's input types, calls the engine, and saves every step it yields. This keeps the loop fast to test with a fake model client, and makes it possible to swap model providers. When you create `backend/engine/`, add it to `root_packages` in `backend/.importlinter`, and add a `forbidden` contract that stops it from importing `django`, `rest_framework`, and `apps`.
+The agent loop lives in `backend/engine/`, a plain Python package that never imports Django, Django REST framework, or the apps. The `engine-is-plain-python` contract in `backend/.importlinter` enforces that, so the loop stays fast to test with a fake model client, and a model provider can be swapped without touching the apps.
 
-Model provider SDKs, such as `anthropic`, belong behind a small client interface in `engine/`, so tests never call a real model. Read API keys from the `providers` app or the environment, never from code.
+- `engine/types.py` holds the data. Messages are `SystemMessage`, `UserMessage`, `AssistantMessage` (with its `ToolCall`s), and `ToolMessage` (one tool call's result). A `Tool` is a `ToolSpec` (name, description, JSON schema), `requires_approval`, `prepare` (checks and cleans the model's arguments), and `run`. Both raise `ToolError`, whose message goes back to the model.
+- `engine/loop.py` has `run()`. It calls the model through a `ModelClient`, settles the tool calls the model asks for, and calls the model again until it answers or `MAX_STEPS` stops it. Each step yields its `TextDelta` events, then one event per tool call, then `Finished`. A call to a tool that needs approval yields `ToolCallRequested` and never runs inside the engine: the run ends after that step, and the caller runs the loop again once the user decided, with the results in the conversation. Every other call is settled at once as `ToolCallCompleted`: the tool ran, or the call named no offered tool, or `prepare` rejected its arguments.
+- `engine/openrouter.py` has `OpenRouterClient`, which streams OpenRouter's chat completions with `stream: true`, and assembles the text and the tool-call fragments. It raises `ModelError`, whose message is for the user, and logs the underlying cause.
+- `engine/testing.py` has `FakeClient`, which plays model steps back in order and records what each step was sent.
+- `engine/tests/` holds unit tests that need no database. `manage.py test` runs them with the app tests. `engine/tests/fixtures/` holds streams recorded from OpenRouter.
+
+An app that runs the loop turns its models into these types, passes a model client and the tools the user may use, and saves every step that `run()` yields. Model provider SDKs and HTTP clients belong behind `ModelClient`, so tests never call a real model. Read API keys from the `providers` app or the environment, never from code.

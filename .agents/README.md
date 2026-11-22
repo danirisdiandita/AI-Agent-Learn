@@ -37,6 +37,7 @@ Read `AGENTS.md` first. Then read this file, and the doc for each area that your
 | Custom hooks and TanStack Query only in hook folders, `fetch` only in API modules, features never import each other, shared code never imports a feature | `scripts/check-react.sh` | [`react.md`](react.md) |
 | Inside a Django app, `api` → `services`/`selectors` → `models` | `lint-imports` in `backend/` | [`backend.md`](backend.md) |
 | Django apps import only apps below them in the domain order | `lint-imports` in `backend/` | [`backend.md`](backend.md) |
+| `backend/engine/` never imports Django, Django REST framework, or the apps | `lint-imports` in `backend/` | [`backend.md`](backend.md#the-agent-runtime) |
 | Table, column, index, and constraint names of models in `apps/` are snake_case, and a multi-word model sets `db_table` | `manage.py check` in `backend/` (`config/checks.py`) | [`backend.md`](backend.md#names-in-the-database) |
 | Every doc here is indexed, and every relative link resolves | `scripts/check-docs.sh` | this file |
 
